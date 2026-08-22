@@ -155,7 +155,13 @@ just wiring a picker + Storage service back in.
   - Debug SHA-1 fingerprint for Google Sign-In: registered — see docs/SETUP.md
 - [x] Visual direction confirmed and implemented (theme + motion tokens)
 - [x] Data models + Firestore schema — see [docs/DATA_MODELS.md](DATA_MODELS.md)
-- [ ] Cloudflare Worker (Gemini relay + scam scorer)
+- [x] Cloudflare Worker (Gemini relay + scam scorer) — see [worker/README.md](../worker/README.md)
+  - Rule engine ported to both runtimes: `lib/data/services/scam_rule_engine.dart`
+    (instant client-side card badge) and `worker/src/scamRules.ts` (authoritative
+    server-side recompute for the shared cached assessment)
+  - Not yet deployed (needs a KV namespace + service account secrets — see
+    worker/README.md "One-time setup"); typechecked, unit-tested, and
+    `wrangler deploy --dry-run` bundles cleanly
 - [ ] Screens
 - [ ] Web landing page
 - [ ] bdapps API integration

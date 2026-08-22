@@ -1,0 +1,6 @@
+# Copy to .dev.vars (gitignored) for `wrangler dev` locally. Real secrets
+# in deployed environments are set via `wrangler secret put`, never here.
+
+GEMINI_API_KEY=your-gemini-api-key
+FIREBASE_CLIENT_EMAIL=your-service-account@trusthire-bdapps.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMII...\n-----END PRIVATE KEY-----\n"

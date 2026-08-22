@@ -1,0 +1,61 @@
+/**
+ * Gemini relay — the one place the API key touches the network. Forces
+ * structured JSON output via `responseSchema` so the response parses
+ * straight into a UI model with no prose-wrapper stripping, per the brief
+ * ("Gemini Flash API ... structured to return JSON only").
+ */
+
+interface Env {
+  GEMINI_API_KEY: string;
+  GEMINI_MODEL: string;
+}
+
+export class GeminiError extends Error {}
+
+/** A minimal subset of the Gemini `responseSchema` (OpenAPI-style) shape —
+ * just enough for the two flat schemas this Worker uses. */
+export interface GeminiJsonSchema {
+  type: 'OBJECT';
+  properties: Record<string, { type: 'STRING' | 'INTEGER' | 'ARRAY'; items?: { type: 'STRING' } }>;
+  required: string[];
+}
+
+export async function callGeminiForJson<T>(
+  env: Env,
+  systemInstruction: string,
+  userPrompt: string,
+  schema: GeminiJsonSchema,
+): Promise<T> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${env.GEMINI_MODEL}:generateContent?key=${env.GEMINI_API_KEY}`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+      systemInstruction: { parts: [{ text: systemInstruction }] },
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: schema,
+        temperature: 0.2,
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    // Gemini error bodies are small (a JSON error object), safe to buffer.
+    throw new GeminiError(`Gemini request failed (${res.status}): ${await res.text()}`);
+  }
+
+  const body = await res.json<{
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+  }>();
+  const text = body.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new GeminiError('Gemini response had no content');
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new GeminiError('Gemini response was not valid JSON despite responseSchema');
+  }
+}

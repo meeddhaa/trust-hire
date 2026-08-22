@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "trusthire-ai-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Non-secret config. Secrets (GEMINI_API_KEY, FIREBASE_CLIENT_EMAIL,
+  // FIREBASE_PRIVATE_KEY) are set via `wrangler secret put` — see README.md
+  // — never here, so they never land in git.
+  "vars": {
+    "FIREBASE_PROJECT_ID": "trusthire-bdapps",
+    "GEMINI_MODEL": "gemini-2.5-flash",
+    "MATCH_MODEL_VERSION": "gemini-2.5-flash@match-v1",
+    "SCAM_MODEL_VERSION": "gemini-2.5-flash@scam-v1",
+    "RATE_LIMIT_PER_USER_PER_DAY": "50"
+  },
+
+  // Per-user daily call counters. A KV read on every request is cheap and
+  // eventually-consistent writes are fine for a soft rate limit — a Durable
+  // Object would give strict consistency we don't need here.
+  "kv_namespaces": [
+    { "binding": "RATE_LIMIT_KV", "id": "REPLACE_WITH_KV_NAMESPACE_ID" }
+  ],
+
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}
