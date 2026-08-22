@@ -34,9 +34,12 @@ data layer) decides what a free-tier user actually gets shown. See
 ## Model summaries
 
 **`UserProfile`** (`user_profile.dart`) — profile built during onboarding:
-skills (the input side of the match diff), experience, resume storage
-path, onboarding-complete flag the router redirects on. Named `UserProfile`
-rather than `User` to avoid colliding with `firebase_auth`'s `User`.
+skills (the input side of the match diff), experience, onboarding-complete
+flag the router redirects on. Named `UserProfile` rather than `User` to
+avoid colliding with `firebase_auth`'s `User`. Carries a nullable
+`resumeStoragePath` that's currently always unset — Storage needs the
+Blaze plan to enable, so onboarding collects skills as typed input
+instead; see "Decision: no Firebase Storage" in `docs/ARCHITECTURE.md`.
 
 **`JobListing`** (`job_listing.dart`) — a seeded listing. Fields double as
 raw input to the rule-based scam scorer (step 3): `companyDomain`,

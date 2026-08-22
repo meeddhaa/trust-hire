@@ -43,9 +43,13 @@ class UserProfile extends Equatable {
   final int? yearsOfExperience;
   final String? educationLevel;
 
-  /// Firebase Storage path (not a download URL — those expire) to the
-  /// uploaded CV, e.g. `resumes/{uid}/cv.pdf`. Resolved to a URL on demand
-  /// by whichever repository needs to render or attach it.
+  /// Firebase Storage path (not a download URL — those expire) to an
+  /// uploaded CV, e.g. `resumes/{uid}/cv.pdf`. Currently always null and
+  /// unused: Storage requires the Blaze plan (billing card) to enable at
+  /// all, so onboarding collects `skills` as typed input instead — see
+  /// "Decision: no Firebase Storage" in docs/ARCHITECTURE.md. Left in the
+  /// model, nullable, so re-enabling upload later is wiring, not a schema
+  /// migration.
   final String? resumeStoragePath;
 
   /// Gates the onboarding → feed redirect in the router. False until the

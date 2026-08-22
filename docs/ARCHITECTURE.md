@@ -32,7 +32,8 @@ lib/
   features/                     One folder per screen/flow. Each has:
                                    presentation/  screens + feature-local widgets
                                    providers/     Riverpod providers/notifiers for that flow
-    onboarding/                 Profile build (skills, experience, resume upload)
+    onboarding/                 Profile build (skills, experience — typed, no resume upload;
+                                 see "Storage" decision below)
     listings/                   Feed: swipeable/scrollable list of JobListingCards
     listing_detail/             Match breakdown, trust badge, in-app WebView to source posting
     paywall/                    bdapps DCB subscription screen
@@ -121,6 +122,27 @@ Implemented in `lib/core/theme/` (`app_colors.dart`, `app_typography.dart`,
 at `lib/shared/widgets/theme_preview_page.dart` (temporary — see its doc
 comment; gets replaced by the real listings feed in step 4).
 
+## Decision: no Firebase Storage, no resume upload (for now)
+
+Firebase now requires the **Blaze** (pay-as-you-go) plan to use Storage at
+all, even at zero usage — Spark no longer supports it. That means adding a
+billing card to a bootcamp project just to hold a handful of PDFs, for a
+feature the brief only asks for conditionally ("Storage if needed for
+resume/CV upload").
+
+Decided against it: onboarding collects skills, experience, and education
+as typed structured input instead of a parsed resume. This is what
+actually feeds the match-gap Gemini call anyway (`UserProfile.skills` diffed
+against `JobListing.requiredSkills`) — a resume would need parsing into
+the same structured shape regardless, so skipping the upload step removes
+a dependency (Storage, a PDF parser) without changing what the AI feature
+does. `UserProfile.resumeStoragePath` stays in the model as a nullable,
+currently-unused field — cheap to leave in, and re-enabling upload later
+(if the team decides it's worth the Blaze upgrade) needs no schema change,
+just wiring a picker + Storage service back in.
+
+`storage.rules` stays in the repo, unused, for the same reason.
+
 ## Status
 
 - [x] Project scaffolded (`flutter create`, Android target)
@@ -128,7 +150,8 @@ comment; gets replaced by the real listings feed in step 4).
 - [x] Core dependencies chosen and installed
 - [x] Firebase project created and wired (`flutterfire configure`)
   - Firestore: created + baseline rules deployed
-  - Storage / Auth providers: manual console steps left — see docs/SETUP.md
+  - Storage: deliberately not enabled — see "Storage" decision below
+  - Auth providers: manual console step left — see docs/SETUP.md
 - [x] Visual direction confirmed and implemented (theme + motion tokens)
 - [x] Data models + Firestore schema — see [docs/DATA_MODELS.md](DATA_MODELS.md)
 - [ ] Cloudflare Worker (Gemini relay + scam scorer)
