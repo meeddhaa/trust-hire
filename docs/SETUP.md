@@ -17,21 +17,29 @@ conditionally — see "Decision: no Firebase Storage, no resume upload (for
 now)" in `docs/ARCHITECTURE.md`. `storage.rules` is written and stays in
 the repo unused, in case this gets revisited later.
 
-### Manual steps still required (console-only, no CLI path)
+Auth providers (Email/Password, Google) are enabled — confirmed both via
+the console and via `firebase auth:export` from the CLI.
 
-1. **Enable Auth providers** — Email/Password and Google:
-   https://console.firebase.google.com/project/trusthire-bdapps/authentication/providers
-   - Email/Password: toggle on, no further config.
-   - Google: toggle on. For Google Sign-In to work on Android you also need
-     to register a SHA-1 (debug) and later SHA-1/SHA-256 (release) certificate
-     fingerprint on the Android app in Project Settings. Get the debug one with:
-     ```
-     cd android && ./gradlew signingReport
-     ```
-     then paste the SHA-1 under Project Settings → Your apps → trusthire (Android).
+### Manual step still required (console-only, no CLI path)
 
-Once that's done, re-run `flutter pub get` if `google-services.json` gets
-re-downloaded, and the app can authenticate end-to-end.
+**Register the debug SHA-1 fingerprint**, needed for Google Sign-In on
+Android (without it, sign-in fails with `DEVELOPER_ERROR` even though
+everything else is configured):
+https://console.firebase.google.com/project/trusthire-bdapps/settings/general
+→ "Your apps" → trusthire (Android) → "Add fingerprint"
+
+Debug SHA-1 (this machine's `~/.android/debug.keystore`, regenerate with
+`cd android && ./gradlew signingReport` if it ever changes):
+```
+5C:A1:4D:53:24:4D:BF:FF:9A:32:14:35:67:E9:A9:12:AB:6C:29:4F
+```
+
+A release build (for judging) will need its own release-keystore SHA-1
+added here too, once that keystore exists.
+
+After adding the fingerprint, `google-services.json` regenerates — pull the
+new one with `flutterfire configure` (or download it from the console) and
+replace `android/app/google-services.json`, then `flutter pub get`.
 
 ## Fonts
 

@@ -151,7 +151,8 @@ just wiring a picker + Storage service back in.
 - [x] Firebase project created and wired (`flutterfire configure`)
   - Firestore: created + baseline rules deployed
   - Storage: deliberately not enabled — see "Storage" decision below
-  - Auth providers: manual console step left — see docs/SETUP.md
+  - Auth providers (Email/Password, Google): enabled
+  - SHA-1 fingerprint for Google Sign-In: manual console step left — see docs/SETUP.md
 - [x] Visual direction confirmed and implemented (theme + motion tokens)
 - [x] Data models + Firestore schema — see [docs/DATA_MODELS.md](DATA_MODELS.md)
 - [ ] Cloudflare Worker (Gemini relay + scam scorer)
