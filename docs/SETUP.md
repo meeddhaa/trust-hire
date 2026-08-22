@@ -20,26 +20,20 @@ the repo unused, in case this gets revisited later.
 Auth providers (Email/Password, Google) are enabled — confirmed both via
 the console and via `firebase auth:export` from the CLI.
 
-### Manual step still required (console-only, no CLI path)
-
-**Register the debug SHA-1 fingerprint**, needed for Google Sign-In on
+**Debug SHA-1 fingerprint registered** — needed for Google Sign-In on
 Android (without it, sign-in fails with `DEVELOPER_ERROR` even though
-everything else is configured):
-https://console.firebase.google.com/project/trusthire-bdapps/settings/general
-→ "Your apps" → trusthire (Android) → "Add fingerprint"
-
-Debug SHA-1 (this machine's `~/.android/debug.keystore`, regenerate with
-`cd android && ./gradlew signingReport` if it ever changes):
+everything else is configured). This machine's `~/.android/debug.keystore`
+fingerprint:
 ```
 5C:A1:4D:53:24:4D:BF:FF:9A:32:14:35:67:E9:A9:12:AB:6C:29:4F
 ```
+is registered under Project Settings → Your apps → trusthire (Android).
+Confirmed live: the re-pulled `google-services.json` now carries a real
+`oauth_client`/`certificate_hash` entry instead of an empty array.
 
-A release build (for judging) will need its own release-keystore SHA-1
-added here too, once that keystore exists.
-
-After adding the fingerprint, `google-services.json` regenerates — pull the
-new one with `flutterfire configure` (or download it from the console) and
-replace `android/app/google-services.json`, then `flutter pub get`.
+**Still needed eventually:** a release build (for judging) will need its
+own release-keystore SHA-1 added here too, once that keystore exists —
+regenerate any machine's fingerprint with `cd android && ./gradlew signingReport`.
 
 ## Fonts
 

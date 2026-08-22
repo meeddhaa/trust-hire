@@ -12,7 +12,20 @@
           "package_name": "com.trusthire.trusthire"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "1047589145290-md6p5r6autejhuls6li60p5btlk7m90s.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.trusthire.trusthire",
+            "certificate_hash": "5ca14d53244dbfff9a32143567e9a912ab6c294f"
+          }
+        },
+        {
+          "client_id": "1047589145290-tc82rp2fl5h05qj237s329sqh7k2ha08.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDIroRXGV7QNAUr-Tdsauv-FwyS0tY89eM"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1047589145290-tc82rp2fl5h05qj237s329sqh7k2ha08.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
