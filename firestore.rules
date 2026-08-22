@@ -1,7 +1,6 @@
 rules_version = '2';
 
-// Baseline security rules — refined further once the Firestore schema
-// (docs/DATA_MODELS.md) is finalized in step 2 of the build.
+// Baseline security rules, matching the schema in docs/DATA_MODELS.md.
 //
 // Principle: the Flutter client is read-mostly. Anything derived from an
 // LLM call (match results, scam assessments) or anything billing-related

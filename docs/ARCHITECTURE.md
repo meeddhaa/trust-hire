@@ -8,7 +8,7 @@ lib/
   app.dart                      MaterialApp.router, theme wiring, go_router
 
   core/
-    theme/                      Color system, type scale, motion tokens (pending confirmation)
+    theme/                      Color system, type scale, motion tokens ("Editorial Trust")
     router/                     go_router route table + guards (auth, onboarding, paywall)
     constants/                  Env keys, Firestore collection names, remote config defaults
     network/                    HTTP client wrapper for the Cloudflare Worker + bdapps API
@@ -104,7 +104,7 @@ into a specific listing later), with redirect-based guards for
    gap skills, reasoning string, upskilling roadmap, full scam reasoning.
 
 Full model shapes and Firestore collection schema are specced in
-[docs/DATA_MODELS.md](DATA_MODELS.md) (next step).
+[docs/DATA_MODELS.md](DATA_MODELS.md).
 
 ## Visual direction: Editorial Trust (confirmed)
 
@@ -130,7 +130,7 @@ comment; gets replaced by the real listings feed in step 4).
   - Firestore: created + baseline rules deployed
   - Storage / Auth providers: manual console steps left — see docs/SETUP.md
 - [x] Visual direction confirmed and implemented (theme + motion tokens)
-- [ ] Data models + Firestore schema
+- [x] Data models + Firestore schema — see [docs/DATA_MODELS.md](DATA_MODELS.md)
 - [ ] Cloudflare Worker (Gemini relay + scam scorer)
 - [ ] Screens
 - [ ] Web landing page
