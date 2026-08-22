@@ -1,0 +1,59 @@
+rules_version = '2';
+
+// Baseline security rules — refined further once the Firestore schema
+// (docs/DATA_MODELS.md) is finalized in step 2 of the build.
+//
+// Principle: the Flutter client is read-mostly. Anything derived from an
+// LLM call (match results, scam assessments) or anything billing-related
+// (subscriptions) is written server-side only — by the Cloudflare Worker /
+// bdapps webhook handler using Admin credentials, which bypass these rules
+// entirely. That keeps a compromised or modified client from forging a
+// match score, a "verified" trust badge, or a paid subscription state.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // --- Users: profile, skills, resume reference ---
+    // Each user can read/write only their own document.
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // --- Job listings: curated feed, seeded/managed server-side ---
+    // Readable by any signed-in user; never writable from the client.
+    match /listings/{listingId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // --- Match results: per (user, listing) explainable match output ---
+    // Cached by the Worker after a Gemini call. Client reads its own only.
+    match /matchResults/{matchId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow write: if false;
+    }
+
+    // --- Scam assessments: per-listing trust badge + reasoning ---
+    // Not user-scoped (same listing = same assessment for everyone), but
+    // still server-written only so a client can't fake a "Verified" badge.
+    match /scamAssessments/{listingId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // --- Subscriptions: bdapps DCB paid-tier state ---
+    // Written only by the server-side bdapps webhook handler.
+    match /subscriptions/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if false;
+    }
+  }
+}

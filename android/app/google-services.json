@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1047589145290",
+    "project_id": "trusthire-bdapps",
+    "storage_bucket": "trusthire-bdapps.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1047589145290:android:b60d8c55c6027401598233",
+        "android_client_info": {
+          "package_name": "com.trusthire.trusthire"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDIroRXGV7QNAUr-Tdsauv-FwyS0tY89eM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

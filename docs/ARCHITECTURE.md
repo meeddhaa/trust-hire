@@ -106,13 +106,30 @@ into a specific listing later), with redirect-based guards for
 Full model shapes and Firestore collection schema are specced in
 [docs/DATA_MODELS.md](DATA_MODELS.md) (next step).
 
+## Visual direction: Editorial Trust (confirmed)
+
+Warm paper/ink base, single burnt-amber accent, a *separate* muted
+verdict scale (slate-teal / amber / brick) reserved for trust badges and
+match scores so they read as data, not brand decoration. Fraunces (serif)
+for score numerals and verdict headlines; Manrope (grotesk) for everything
+else. Motion is confident, not bouncy: radial arc + count-up for the match
+score, a brief hold-then-stamp for the trust badge, accordion expand (not
+modal) for the gap breakdown, staggered entrance for feed cards.
+
+Implemented in `lib/core/theme/` (`app_colors.dart`, `app_typography.dart`,
+`app_motion.dart`, `risk_colors.dart`, `app_theme.dart`). Runnable preview
+at `lib/shared/widgets/theme_preview_page.dart` (temporary — see its doc
+comment; gets replaced by the real listings feed in step 4).
+
 ## Status
 
 - [x] Project scaffolded (`flutter create`, Android target)
 - [x] Folder architecture in place
 - [x] Core dependencies chosen and installed
-- [ ] Firebase project created and wired (`flutterfire configure`)
-- [ ] Visual direction confirmed
+- [x] Firebase project created and wired (`flutterfire configure`)
+  - Firestore: created + baseline rules deployed
+  - Storage / Auth providers: manual console steps left — see docs/SETUP.md
+- [x] Visual direction confirmed and implemented (theme + motion tokens)
 - [ ] Data models + Firestore schema
 - [ ] Cloudflare Worker (Gemini relay + scam scorer)
 - [ ] Screens
