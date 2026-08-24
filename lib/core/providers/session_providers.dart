@@ -19,3 +19,13 @@ final currentProfileProvider = StreamProvider<UserProfile?>((ref) {
   if (uid == null) return Stream.value(null);
   return ref.watch(profileRepositoryProvider).watchProfile(uid);
 });
+
+/// Live subscription tier for whoever's signed in — defaults to free (see
+/// `Subscription.free`) until step 7 wires a real bdapps subscription.
+/// Shared across `listing_detail` (free/paid content gating), `paywall`,
+/// and `subscription`.
+final currentSubscriptionProvider = StreamProvider<Subscription>((ref) {
+  final uid = ref.watch(currentUidProvider);
+  if (uid == null) return Stream.value(const Subscription(uid: ''));
+  return ref.watch(subscriptionRepositoryProvider).watchSubscription(uid);
+});

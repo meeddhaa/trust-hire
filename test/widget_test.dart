@@ -1,24 +1,21 @@
-// Basic smoke test: the app boots and renders its root route without
-// throwing. Firebase.initializeApp is skipped here (no test bootstrap yet)
-// so this exercises the theme/router wiring, not the full app.
+// Smoke test for the splash screen in isolation. The real app's routed
+// screens (sign-in, listings, ...) sit behind Riverpod providers that
+// touch `FirebaseAuth.instance` as soon as they're read — even just
+// resolving `goRouterProvider` requires `authStateProvider`, which needs
+// `Firebase.initializeApp()` to have run first. That needs a Firebase
+// test harness (fake/mocked platform channels) this project doesn't have
+// set up yet, so this test is deliberately scoped to what's testable
+// without one: the splash screen renders correctly on its own. See
+// `test/data/scam_rule_engine_test.dart` for real business-logic coverage
+// that also needs no Firebase bootstrap.
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:trusthire/core/router/app_router.dart';
-import 'package:trusthire/core/theme/app_theme.dart';
+import 'package:trusthire/core/router/splash_screen.dart';
 
 void main() {
-  testWidgets('renders theme preview root route', (tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        child: MaterialApp.router(
-          theme: AppTheme.light(),
-          routerConfig: appRouter,
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets('SplashScreen shows a loading indicator', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: SplashScreen()));
 
-    expect(find.text('Editorial Trust'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
   });
 }
