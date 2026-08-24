@@ -159,9 +159,21 @@ just wiring a picker + Storage service back in.
   - Rule engine ported to both runtimes: `lib/data/services/scam_rule_engine.dart`
     (instant client-side card badge) and `worker/src/scamRules.ts` (authoritative
     server-side recompute for the shared cached assessment)
-  - Not yet deployed (needs a KV namespace + service account secrets — see
-    worker/README.md "One-time setup"); typechecked, unit-tested, and
-    `wrangler deploy --dry-run` bundles cleanly
+  - **Deployed** at `https://trusthire-ai-relay.nafisa-notesapp.workers.dev`
+    and verified end-to-end against real Firebase Auth tokens, real
+    Firestore reads/writes, and real Gemini calls (both a clean listing
+    and one seeded with all five scam signals; a match call producing the
+    brief's exact "Matched: X, Y. Gap: Z" format plus a roadmap; cache
+    hits confirmed free of a second Gemini spend)
+  - Two real bugs caught by that live smoke test, fixed before this was
+    marked done: (1) `gemini-2.5-flash` — used at the time this was first
+    written — no longer accepts `generateContent` on new projects; Google's
+    own error named `gemini-3.6-flash` as the replacement, now confirmed
+    available and non-preview via `ListModels`, so the config was updated;
+    (2) `auth.ts` let a malformed (but 3-segment-shaped) token throw an
+    uncaught `SyntaxError` past the intended `AuthError` handling, landing
+    on a generic 500 instead of a clean 401 — now wrapped so any decode
+    failure normalizes to `AuthError`, with regression tests added
 - [ ] Screens
 - [ ] Web landing page
 - [ ] bdapps API integration

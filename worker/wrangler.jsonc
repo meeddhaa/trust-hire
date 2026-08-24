@@ -10,9 +10,13 @@
   // — never here, so they never land in git.
   "vars": {
     "FIREBASE_PROJECT_ID": "trusthire-bdapps",
-    "GEMINI_MODEL": "gemini-2.5-flash",
-    "MATCH_MODEL_VERSION": "gemini-2.5-flash@match-v1",
-    "SCAM_MODEL_VERSION": "gemini-2.5-flash@scam-v1",
+    // gemini-2.5-flash is listed by ListModels but rejects generateContent
+    // for this project with "no longer available to new users" (confirmed
+    // live, 2026-08-25) — Google's own error names gemini-3.6-flash as the
+    // replacement, confirmed present and non-preview in ListModels.
+    "GEMINI_MODEL": "gemini-3.6-flash",
+    "MATCH_MODEL_VERSION": "gemini-3.6-flash@match-v1",
+    "SCAM_MODEL_VERSION": "gemini-3.6-flash@scam-v1",
     "RATE_LIMIT_PER_USER_PER_DAY": "50"
   },
 
@@ -20,7 +24,7 @@
   // eventually-consistent writes are fine for a soft rate limit — a Durable
   // Object would give strict consistency we don't need here.
   "kv_namespaces": [
-    { "binding": "RATE_LIMIT_KV", "id": "REPLACE_WITH_KV_NAMESPACE_ID" }
+    { "binding": "RATE_LIMIT_KV", "id": "1ac4f9c2f3e54c51bcde334ee8d59712" }
   ],
 
   "observability": {

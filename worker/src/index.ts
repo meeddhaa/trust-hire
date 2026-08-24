@@ -156,7 +156,10 @@ export default {
     } catch (err) {
       if (err instanceof AuthError) return errorResponse(401, err.message);
       if (err instanceof TypeError) return errorResponse(400, err.message);
-      if (err instanceof GeminiError) return errorResponse(502, 'AI provider error, try again shortly');
+      if (err instanceof GeminiError) {
+        console.error('Gemini call failed:', err.message);
+        return errorResponse(502, 'AI provider error, try again shortly');
+      }
       console.error('Unhandled Worker error:', err);
       return errorResponse(500, 'Internal error');
     }

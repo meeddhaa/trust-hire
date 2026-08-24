@@ -61,8 +61,26 @@ function base64UrlToJson<T>(b64url: string): T {
 }
 
 /** Returns the verified `uid`, or throws `AuthError` with a message safe
- * to surface to the client (no internals). */
+ * to surface to the client (no internals).
+ *
+ * A malformed token can fail in ways beyond the checks below — invalid
+ * base64, truncated JSON, a JWK Web Crypto rejects — each of which throws
+ * its own error type (`SyntaxError`, `DOMException`, ...), not `AuthError`.
+ * Rather than special-case every failure mode, the whole verification
+ * runs inside `verifyFirebaseIdTokenChecked` and this wrapper normalizes
+ * any non-`AuthError` throw into one, so a garbage `Authorization` header
+ * always yields a clean 401 instead of falling through to the 500 path in
+ * index.ts's catch-all. */
 export async function verifyFirebaseIdToken(idToken: string, projectId: string): Promise<string> {
+  try {
+    return await verifyFirebaseIdTokenChecked(idToken, projectId);
+  } catch (err) {
+    if (err instanceof AuthError) throw err;
+    throw new AuthError('Malformed or invalid token');
+  }
+}
+
+async function verifyFirebaseIdTokenChecked(idToken: string, projectId: string): Promise<string> {
   const parts = idToken.split('.');
   if (parts.length !== 3) throw new AuthError('Malformed token');
   const [headerB64, payloadB64, signatureB64] = parts as [string, string, string];

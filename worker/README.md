@@ -7,6 +7,18 @@ scam-rule score server-side for the shared `scamAssessments` cache, calls
 Gemini for structured JSON reasoning, and writes results back to
 Firestore.
 
+**Deployed and verified end-to-end** at
+`https://trusthire-ai-relay.nafisa-notesapp.workers.dev` — both endpoints
+tested live against real Firebase Auth tokens, real Firestore reads/writes,
+and real Gemini calls (clean listing → `verifiedLeaning` with grounded
+reasoning; a listing seeded with all five scam signals → `highRisk` with
+per-signal reasoning; a match call → correctly matched/gap skills in the
+brief's exact "Matched: X, Y. Gap: Z" format plus a concrete roadmap).
+Cache-hit behavior confirmed (identical `computedAt` on repeat calls, no
+second Gemini spend). All test data and the throwaway test user were
+deleted afterward — see git history on this file for the two real bugs
+that first pass caught.
+
 See `docs/ARCHITECTURE.md` → "Data flow: match + scam assessment" for how
 this fits into the rest of the app, and `docs/DATA_MODELS.md` for the
 Firestore schema this reads and writes.
@@ -75,8 +87,8 @@ fill in the same three values instead of using `wrangler secret put`.
 npm install
 npm run deploy
 ```
-Note the deployed URL (`https://trusthire-ai-relay.<your-subdomain>.workers.dev`)
-— that's what `core/network/` in the Flutter app points at.
+Note the deployed URL — that's what `core/network/` in the Flutter app
+points at (currently `https://trusthire-ai-relay.nafisa-notesapp.workers.dev`).
 
 ## Local development note
 
@@ -95,25 +107,28 @@ work normally.
 ```bash
 npm test
 ```
-Runs `test/scamRules.test.ts` — plain Vitest, no Workers runtime needed,
-since `scamRules.ts` is pure logic (regex + arithmetic). The other modules
-(`auth.ts`'s JWT verification, `firestoreClient.ts`'s service-account flow,
-`gemini.ts`'s fetch call) use Workers-only APIs (`crypto.subtle` in a
-Workers context, `KVNamespace`) and would need
-`@cloudflare/vitest-pool-workers` (already a devDependency) wired up via
-`defineWorkersConfig` in `vitest.config.ts` — deferred until this runs on
-a supported OS or in CI, rather than left untested indefinitely.
+Runs `test/scamRules.test.ts` and `test/auth.test.ts` — plain Vitest, no
+Workers runtime needed: `scamRules.ts` is pure logic (regex + arithmetic),
+and `crypto.subtle`/`atob`/`TextDecoder` (what `auth.ts` needs) are all
+available under plain Node too. `firestoreClient.ts`'s service-account
+flow and `gemini.ts`'s fetch call weren't unit-tested this way (they're
+thin wrappers around real network calls, better suited to an integration
+test) — instead they were verified against the live deployment, see
+"Deployed and verified end-to-end" above. `KVNamespace`-typed code
+(`rateLimiter.ts`) would need `@cloudflare/vitest-pool-workers` (already a
+devDependency) wired up via `defineWorkersConfig` in `vitest.config.ts` —
+deferred until this runs on a supported OS or in CI.
 
-## Manual smoke test once deployed
+## Manual smoke test
 
 ```bash
 # Should 401 — no Authorization header
-curl -X POST https://trusthire-ai-relay.<subdomain>.workers.dev/v1/match \
+curl -X POST https://trusthire-ai-relay.nafisa-notesapp.workers.dev/v1/match \
   -H "Content-Type: application/json" -d '{"listingId":"test"}'
 
 # With a real Firebase ID token (e.g. copied from the Flutter app's
 # FirebaseAuth.instance.currentUser?.getIdToken() during a debug session):
-curl -X POST https://trusthire-ai-relay.<subdomain>.workers.dev/v1/match \
+curl -X POST https://trusthire-ai-relay.nafisa-notesapp.workers.dev/v1/match \
   -H "Authorization: Bearer <ID_TOKEN>" \
   -H "Content-Type: application/json" -d '{"listingId":"<a real listing id>"}'
 ```
