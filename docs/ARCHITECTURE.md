@@ -42,8 +42,9 @@ lib/
                                  API is already a clean-enough abstraction at this project's
                                  size; adding another wrapper layer would be indirection with
                                  no payoff (see pubspec's own "avoid overengineering" note)
-    seed/                       Curated real BD job listings + realistic scam examples —
-                                 step 5, not built yet (empty listings collection today)
+    seed/                       Empty — the actual seed tooling lives at
+                                 `scripts/seed-listings/` (Node, not Dart) instead; see
+                                 "Decision: JSearch for real listings" below for why
 
   features/                     One folder per screen/flow. Each has:
                                    presentation/  screens + feature-local widgets
@@ -99,6 +100,9 @@ test/                           Mirrors lib/ for unit + widget tests. Firebase-b
                                  screens themselves stop changing shape.
 worker/                         Cloudflare Worker (Gemini relay, rate limiting, scam scorer) —
                                  deployed, see worker/README.md
+scripts/seed-listings/          Node script: real BD listings from JSearch + curated scam
+                                 examples -> Firestore. See scripts/seed-listings/README.md
+                                 and "Decision: JSearch for real listings" below.
 web_landing/                    Responsive static landing page (subscription info, bdapps req.)
                                  — not built yet
 docs/                           This file, schema notes, decision log
@@ -230,6 +234,50 @@ just wiring a picker + Storage service back in.
 
 `storage.rules` stays in the repo, unused, for the same reason.
 
+## Decision: JSearch for real listings, not a hand-written seed set
+
+The brief's original plan (and the initial version of this doc) had the
+user supplying curated real BD listings by hand — the standard "I'll
+supply these" pattern for a bootcamp demo. Before building that,
+research turned up: no free job API has confirmed Bangladesh coverage.
+[Adzuna](https://developer.adzuna.com/) covers ~20 markets, none of them
+Bangladesh. No Bangladesh job board (bdjobs.com etc.) exposes a public
+API. [JSearch](https://www.openwebninja.com/api/jsearch) (RapidAPI,
+aggregates Google for Jobs/LinkedIn/Indeed) was the one live option,
+with an unconfirmed-until-tested free tier.
+
+Tested live before committing to it (not assumed): `country=bd` queries
+against real BD roles (software, marketing, accounting, customer
+support, design) returned real, verifiably-Bangladeshi results —
+Therap (BD) Ltd., BJIT, nextjobz, Sheba.xyz, real `.com`/`.com.bd`
+employer domains, real LinkedIn apply links — confirmed by inspecting
+actual response payloads, not by trusting the API's own claims. Two
+real gaps surfaced in that same testing, both handled rather than
+ignored: JSearch never returns structured salary or a structured skills
+list (`lib/skillKeywords.mjs` extracts skills from the description text
+instead), and being a legitimate aggregator, it will **never** return a
+fraudulent listing — so the brief's explicit ask for "realistic
+scam-pattern examples" still needed hand-authoring regardless
+(`lib/scamExamples.mjs`, 4 examples spread across the caution/high-risk
+badge range, not all maxed out).
+
+One real API-integration wrinkle, also hit and fixed rather than
+guessed around: the documented endpoint path (`/search`, per multiple
+external sources) 404'd — RapidAPI's gateway returns the same generic
+"endpoint does not exist" message whether a key lacks a subscription or
+the path is simply wrong, which made this genuinely ambiguous until
+pulling the real path from RapidAPI's own code-snippet panel:
+**`/search-v2`**, undocumented in the sources checked beforehand.
+
+This is a Node script (`scripts/seed-listings/`), not Dart under
+`lib/data/seed/` as originally planned — `cloud_firestore` is a Flutter
+plugin (platform channels), it doesn't run as a standalone script, and
+`firebase-admin` (Node) was already the proven pattern from setting up
+the Worker. Two-step by design (`npm run fetch` then `npm run seed`,
+see that directory's README) because JSearch's free tier is a hard 200
+requests/month — fetching and writing to Firestore are separate so
+iterating on the Firestore mapping never costs API quota.
+
 ## Status
 
 - [x] Project scaffolded (`flutter create`, Android target)
@@ -265,23 +313,34 @@ just wiring a picker + Storage service back in.
   feed, listing detail (real match score + trust badge, free/paid gating,
   in-app WebView), profile, paywall, subscription. All wired to Firestore
   and the Worker through repositories; router redirect guards drive the
-  auth → onboarding → feed flow. Not yet exercised on a real device or
-  against seeded data — `flutter analyze` and `flutter test` are clean,
-  but the feed will show its empty state until step 5 seeds `listings`,
-  and sign-in itself hasn't been run interactively (see "Not yet verified"
-  below)
+  auth → onboarding → feed flow.
+  **Verified on a real device** (not just an emulator, which repeatedly
+  hit unrelated System UI ANRs on this dev machine's older macOS host and
+  was abandoned in favor of a physical phone over USB): built and
+  installed the debug APK, signed up, completed onboarding (skills,
+  headline) — all confirmed working end-to-end by the person actually
+  holding the phone, not just by me reading logs.
+- [x] Real listing data seeded — see "Decision: JSearch for real
+  listings" above and [scripts/seed-listings/README.md](../scripts/seed-listings/README.md).
+  54 documents in `listings/`: 50 real Bangladesh postings across 5
+  categories (software, marketing, accounting, customer support, design)
+  + 4 curated scam-pattern examples spread across the caution/high-risk
+  range. Verified via `verify.mjs`, not just trusted after `seed.mjs`
+  exited 0: correct counts, no missing titles/descriptions, spot-checked
+  a real listing (Sheba.xyz, a genuine Dhaka tech platform) and a scam
+  example for field correctness.
 - [ ] Web landing page
 - [ ] bdapps API integration (paywall/subscription UI exists; the actual
   checkout + webhook + unsubscribe call are step 7)
 
 ### Not yet verified
 
-Everything above compiles and typechecks, and the AI pipeline itself was
-proven live in step 3's smoke test (real Gemini calls, real Firestore
-writes) — but the screens built in this step haven't been run
-interactively on a device/emulator yet, only statically analyzed. Before
-calling step 4 done: sign in (email + Google) end-to-end, complete
-onboarding, confirm the router guards actually redirect correctly, and —
-once step 5 seeds real listings — open a listing and confirm the match
-score and trust badge render against a real Worker response, not just a
-mocked one.
+Sign-in and onboarding are confirmed working on a real device. Still
+untested interactively: opening a real seeded listing and confirming the
+match score + trust badge render correctly against a live Worker
+response (not the throwaway smoketest data from step 3, which was
+deleted afterward) — the feed itself, the free/paid gating banner, the
+in-app WebView opening a real `job_apply_link`, and the paywall/
+subscription/profile screens. All compile and typecheck cleanly, and the
+underlying data (real listings, live Worker) is now in place for this to
+actually be checked next.
