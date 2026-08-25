@@ -63,4 +63,15 @@ class ProfileRepository {
       throw const NetworkFailure("Couldn't save your profile — check your internet and try again.");
     }
   }
+
+  /// Records where the resume landed in Storage (or `null` to clear it
+  /// after a delete) — `ResumeService` handles the actual file, this just
+  /// keeps the profile doc's pointer to it in sync.
+  Future<void> setResumeStoragePath(String uid, String? path) async {
+    try {
+      await _doc(uid).update({'resumeStoragePath': path, 'updatedAt': Timestamp.now()});
+    } on FirebaseException {
+      throw const NetworkFailure("Couldn't save your resume info — check your internet and try again.");
+    }
+  }
 }

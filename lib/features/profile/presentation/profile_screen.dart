@@ -3,13 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/providers/session_providers.dart';
 import '../../../data/models/subscription.dart';
-import '../../auth/providers/auth_providers.dart';
 
-/// View profile after onboarding, sign out, and jump to subscription
-/// management. Editing (beyond what onboarding already collects) is a
-/// natural follow-up once this and the paywall/subscription flow are both
-/// in place — kept out of this pass to avoid duplicating the onboarding
-/// form before the fields it touches are stable.
+/// View profile after onboarding — bio, skills, experience. Account-level
+/// actions (sign-out, subscription, appearance, resume) live in Settings
+/// instead (`/settings`), reached via the gear icon here — kept separate
+/// so this screen stays "who you are" and Settings stays "how the app
+/// behaves for you." Editing beyond what onboarding collects is a natural
+/// follow-up once this and the paywall/subscription flow are both stable.
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
@@ -20,7 +20,16 @@ class ProfileScreen extends ConsumerWidget {
     final subscriptionAsync = ref.watch(currentSubscriptionProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Profile')),
+      appBar: AppBar(
+        title: const Text('Profile'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Settings',
+            onPressed: () => context.push('/settings'),
+          ),
+        ],
+      ),
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(child: Text(error.toString())),
@@ -61,17 +70,6 @@ class ProfileScreen extends ConsumerWidget {
                 if (profile.educationLevel != null)
                   _InfoRow(label: 'Education', value: profile.educationLevel!),
                 _InfoRow(label: 'Email', value: profile.email),
-                const SizedBox(height: 28),
-
-                OutlinedButton(
-                  onPressed: () => context.push('/subscription'),
-                  child: const Text('Manage subscription'),
-                ),
-                const SizedBox(height: 10),
-                TextButton(
-                  onPressed: () => ref.read(authControllerProvider.notifier).signOut(),
-                  child: const Text('Sign out'),
-                ),
               ],
             ),
           );

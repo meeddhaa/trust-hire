@@ -5,6 +5,7 @@ import '../../data/repositories/profile_repository.dart';
 import '../../data/repositories/scam_repository.dart';
 import '../../data/repositories/subscription_repository.dart';
 import '../../data/services/firebase_auth_service.dart';
+import '../../data/services/resume_service.dart';
 
 /// Plain `Provider`s for repositories/services shared across three or more
 /// features (listings, listing_detail, onboarding, profile, paywall,
@@ -25,3 +26,5 @@ final scamRepositoryProvider = Provider<ScamRepository>((ref) => ScamRepository(
 final subscriptionRepositoryProvider = Provider<SubscriptionRepository>(
   (ref) => SubscriptionRepository(),
 );
+
+final resumeServiceProvider = Provider<ResumeService>((ref) => ResumeService());

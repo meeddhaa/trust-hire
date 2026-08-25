@@ -29,6 +29,17 @@ export const SCAM_RESPONSE_SCHEMA: GeminiJsonSchema = {
   required: ['reasoning'],
 };
 
+export const RESUME_TAILOR_RESPONSE_SCHEMA: GeminiJsonSchema = {
+  type: 'OBJECT',
+  properties: {
+    tailoredSummary: { type: 'STRING' },
+    emphasize: { type: 'ARRAY', items: { type: 'STRING' } },
+    addKeywords: { type: 'ARRAY', items: { type: 'STRING' } },
+    suggestions: { type: 'ARRAY', items: { type: 'STRING' } },
+  },
+  required: ['tailoredSummary', 'emphasize', 'addKeywords', 'suggestions'],
+};
+
 const MATCH_SYSTEM_INSTRUCTION = `You are the explainable job-matching engine inside TrustHire, an app \
 helping job seekers in Bangladesh evaluate listings. Given a candidate's \
 profile and a job listing, you must:
@@ -59,6 +70,42 @@ plainly and note what makes the listing look legitimate (verifiable \
 domain, disclosed salary in a normal range, no pressure language). \
 Respond with JSON only, matching the schema exactly, no text outside \
 the JSON.`;
+
+const RESUME_TAILOR_SYSTEM_INSTRUCTION = `You are the resume-tailoring assistant inside TrustHire, an app helping \
+job seekers in Bangladesh apply well. You are given a candidate's actual \
+resume (as an attached document) and one specific job listing. Using ONLY \
+what the resume actually contains — never invent skills, employers, \
+titles, dates, or achievements the resume doesn't support — produce:
+1. tailoredSummary: a 2-3 sentence resume summary/objective rewritten to \
+foreground the parts of THIS candidate's real background that matter \
+most for THIS listing.
+2. emphasize: 2-5 specific things already in the resume (a project, a \
+skill, a past responsibility) the candidate should foreground or expand \
+on for this application — quote or closely paraphrase the resume, don't \
+generalize.
+3. addKeywords: 2-6 terms from the listing's own required skills/language \
+that are missing from the resume's wording but that the candidate's real \
+experience plausibly supports using different words — only suggest a \
+keyword if the resume shows the underlying substance, not just because \
+the listing mentions it.
+4. suggestions: 2-4 concrete edits (not generic advice like "tailor your \
+resume") — e.g. "Move your Firebase project above your internship, since \
+this role is backend-focused."
+If the resume clearly doesn't support the role at all, say so plainly in \
+suggestions rather than fabricating a fit. Respond with JSON only, \
+matching the schema exactly, no text outside the JSON.`;
+
+export function buildResumeTailorPrompt(listing: JobListingDoc) {
+  const userPrompt = JSON.stringify({
+    listing: {
+      title: listing.title,
+      company: listing.company,
+      requiredSkills: listing.requiredSkills,
+      description: listing.description,
+    },
+  });
+  return { systemInstruction: RESUME_TAILOR_SYSTEM_INSTRUCTION, userPrompt };
+}
 
 export function buildMatchPrompt(profile: UserProfileDoc, listing: JobListingDoc) {
   const userPrompt = JSON.stringify({

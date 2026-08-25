@@ -20,19 +20,32 @@ export interface GeminiJsonSchema {
   required: string[];
 }
 
+export interface InlineFile {
+  mimeType: string;
+  base64Data: string;
+}
+
 export async function callGeminiForJson<T>(
   env: Env,
   systemInstruction: string,
   userPrompt: string,
   schema: GeminiJsonSchema,
+  /** Extra document/image parts (e.g. a resume PDF) sent alongside the
+   * text prompt — Gemini reads these natively, no separate text-extraction
+   * step needed. Used by the resume-tailoring endpoint. */
+  inlineFiles: InlineFile[] = [],
 ): Promise<T> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${env.GEMINI_MODEL}:generateContent?key=${env.GEMINI_API_KEY}`;
+
+  const fileParts = inlineFiles.map((file) => ({
+    inlineData: { mimeType: file.mimeType, data: file.base64Data },
+  }));
 
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+      contents: [{ role: 'user', parts: [...fileParts, { text: userPrompt }] }],
       systemInstruction: { parts: [{ text: systemInstruction }] },
       generationConfig: {
         responseMimeType: 'application/json',

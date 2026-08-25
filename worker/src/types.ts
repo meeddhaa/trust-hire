@@ -52,3 +52,13 @@ export interface MatchGeminiResult {
 export interface ScamGeminiResult {
   reasoning: string;
 }
+
+/** Gemini's structured response for a resume-tailoring call. Not cached
+ * to Firestore (unlike match/scam) — a resume can change anytime, and
+ * this is a lower-traffic, always-fresh-on-request feature. */
+export interface ResumeTailorGeminiResult {
+  tailoredSummary: string;
+  emphasize: string[];
+  addKeywords: string[];
+  suggestions: string[];
+}

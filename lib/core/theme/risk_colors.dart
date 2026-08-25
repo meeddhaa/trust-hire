@@ -34,11 +34,11 @@ class RiskColors extends ThemeExtension<RiskColors> {
 
   static const dark = RiskColors(
     verifiedLeaning: AppColors.verifiedLeaningDark,
-    verifiedLeaningBg: AppColors.inkSurface,
+    verifiedLeaningBg: AppColors.graphiteSurface,
     caution: AppColors.cautionDark,
-    cautionBg: AppColors.inkSurface,
+    cautionBg: AppColors.graphiteSurface,
     highRisk: AppColors.highRiskDark,
-    highRiskBg: AppColors.inkSurface,
+    highRiskBg: AppColors.graphiteSurface,
   );
 
   @override

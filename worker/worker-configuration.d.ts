@@ -18,6 +18,7 @@
 interface __BaseEnv_Env {
 	RATE_LIMIT_KV: KVNamespace;
 	FIREBASE_PROJECT_ID: string;
+	FIREBASE_STORAGE_BUCKET: string;
 	GEMINI_MODEL: string;
 	MATCH_MODEL_VERSION: string;
 	SCAM_MODEL_VERSION: string;

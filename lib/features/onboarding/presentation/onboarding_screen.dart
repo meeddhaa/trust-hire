@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/constants/skill_keywords.dart';
 import '../../../core/errors/failure.dart';
 import '../../../core/theme/app_motion.dart';
 import '../providers/onboarding_providers.dart';
@@ -100,14 +101,57 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   style: text.bodyMedium,
                 ),
                 const SizedBox(height: 16),
-                TextField(
-                  controller: _skillController,
-                  decoration: const InputDecoration(
-                    labelText: 'Add a skill',
-                    hintText: 'e.g. Python, SQL, Figma',
-                  ),
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: _addSkill,
+                Autocomplete<String>(
+                  textEditingController: _skillController,
+                  optionsBuilder: (value) =>
+                      SkillKeywords.suggestionsFor(value.text, exclude: _skills),
+                  onSelected: _addSkill,
+                  fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                    return TextField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      decoration: const InputDecoration(
+                        labelText: 'Add a skill',
+                        hintText: 'e.g. Python, SQL, Figma',
+                      ),
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (value) {
+                        _addSkill(value);
+                        onFieldSubmitted();
+                      },
+                    );
+                  },
+                  optionsViewBuilder: (context, onSelected, options) {
+                    final scheme = Theme.of(context).colorScheme;
+                    return Align(
+                      alignment: Alignment.topLeft,
+                      child: Material(
+                        color: scheme.surface,
+                        elevation: 3,
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          constraints: const BoxConstraints(maxHeight: 220, minWidth: 200),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: scheme.outline),
+                          ),
+                          child: ListView.builder(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            shrinkWrap: true,
+                            itemCount: options.length,
+                            itemBuilder: (context, index) {
+                              final option = options.elementAt(index);
+                              return ListTile(
+                                dense: true,
+                                title: Text(option),
+                                onTap: () => onSelected(option),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 12),
                 if (_skills.isNotEmpty)

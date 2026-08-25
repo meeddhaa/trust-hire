@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/errors/failure.dart';
 import '../../../core/providers/session_providers.dart';
 import '../../../core/theme/risk_colors.dart';
 import '../../../data/models/job_listing.dart';
 import '../../../data/models/match_result.dart';
+import '../../../data/models/resume_tailor_result.dart';
 import '../../../data/models/scam_assessment.dart';
 import '../../../shared/widgets/expandable_section.dart';
 import '../../../shared/widgets/match_score_dial.dart';
 import '../../../shared/widgets/trust_badge_chip.dart';
 import '../providers/listing_detail_providers.dart';
+import '../providers/resume_tailor_providers.dart';
 import 'source_webview_screen.dart';
 
 /// The match + trust badge centerpiece screen. Free tier sees the match
@@ -77,6 +80,11 @@ class _ListingDetailBody extends ConsumerWidget {
           const SizedBox(height: 20),
           _TrustSection(listing: listing, isPaid: isPaid),
           const SizedBox(height: 20),
+
+          if (isPaid) ...[
+            _ResumeTailorSection(listing: listing),
+            const SizedBox(height: 20),
+          ],
 
           if (!isPaid)
             Card(
@@ -339,6 +347,123 @@ class _TrustContent extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Text(assessment.reasoning, style: text.bodyMedium),
           ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Paid-tier-only, on-demand: tapping the button calls the Worker's
+/// `/v1/resume-tailor` endpoint (a heavier Gemini call, reading the
+/// uploaded resume PDF directly — see `worker/src/index.ts`), rather than
+/// firing eagerly like the match/scam sections above.
+class _ResumeTailorSection extends ConsumerWidget {
+  const _ResumeTailorSection({required this.listing});
+
+  final JobListing listing;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final text = Theme.of(context).textTheme;
+    final state = ref.watch(resumeTailorControllerProvider);
+
+    ref.listen(resumeTailorControllerProvider, (previous, next) {
+      final error = next.error;
+      if (error == null) return;
+      if (error is NotFoundFailure) return; // handled inline below, not a snackbar
+      final message = error is Failure ? error.message : 'Something went wrong — please try again.';
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(message)));
+    });
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Tailor my resume', style: text.titleLarge),
+            const SizedBox(height: 4),
+            Text(
+              'Grounded in your uploaded resume — see Settings > Resume.',
+              style: text.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            state.when(
+              data: (result) {
+                if (result == null || result.listingId != listing.id) {
+                  return ElevatedButton(
+                    onPressed: () => ref.read(resumeTailorControllerProvider.notifier).tailorFor(listing.id),
+                    child: const Text('Tailor for this job'),
+                  );
+                }
+                return _ResumeTailorContent(result: result);
+              },
+              loading: () => const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: CircularProgressIndicator(),
+                ),
+              ),
+              error: (error, _) {
+                if (error is NotFoundFailure) {
+                  return Text(error.message, style: text.bodyMedium);
+                }
+                return ElevatedButton(
+                  onPressed: () => ref.read(resumeTailorControllerProvider.notifier).tailorFor(listing.id),
+                  child: const Text('Try again'),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ResumeTailorContent extends StatelessWidget {
+  const _ResumeTailorContent({required this.result});
+
+  final ResumeTailorResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(result.tailoredSummary, style: text.bodyMedium),
+        if (result.emphasize.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Text('Emphasize', style: text.labelMedium),
+          const SizedBox(height: 6),
+          for (final item in result.emphasize)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text('•  $item', style: text.bodyMedium),
+            ),
+        ],
+        if (result.addKeywords.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Text('Consider adding', style: text.labelMedium),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [for (final keyword in result.addKeywords) Chip(label: Text(keyword))],
+          ),
+        ],
+        if (result.suggestions.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Text('Suggestions', style: text.labelMedium),
+          const SizedBox(height: 6),
+          for (final suggestion in result.suggestions)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text('•  $suggestion', style: text.bodyMedium),
+            ),
         ],
       ],
     );

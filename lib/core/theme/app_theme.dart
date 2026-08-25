@@ -15,22 +15,22 @@ abstract final class AppTheme {
       primary: AppColors.accent,
       onPrimary: AppColors.accentOnAccent,
       secondary: AppColors.verifiedLeaning,
-      onSecondary: AppColors.paperSurface,
+      onSecondary: AppColors.ledgerSurface,
       error: AppColors.highRisk,
-      onError: AppColors.paperSurface,
-      surface: AppColors.paperSurface,
-      onSurface: AppColors.paperInk,
-      surfaceContainerHighest: AppColors.paperBg,
-      onSurfaceVariant: AppColors.paperInkMuted,
-      outline: AppColors.paperOutline,
+      onError: AppColors.ledgerSurface,
+      surface: AppColors.ledgerSurface,
+      onSurface: AppColors.ledgerInk,
+      surfaceContainerHighest: AppColors.ledgerBg,
+      onSurfaceVariant: AppColors.ledgerInkMuted,
+      outline: AppColors.ledgerOutline,
     );
 
     return _build(
       scheme: scheme,
-      scaffoldBg: AppColors.paperBg,
-      ink: AppColors.paperInk,
-      inkMuted: AppColors.paperInkMuted,
-      outline: AppColors.paperOutline,
+      scaffoldBg: AppColors.ledgerBg,
+      ink: AppColors.ledgerInk,
+      inkMuted: AppColors.ledgerInkMuted,
+      outline: AppColors.ledgerOutline,
       riskColors: RiskColors.light,
     );
   }
@@ -41,22 +41,22 @@ abstract final class AppTheme {
       primary: AppColors.accent,
       onPrimary: AppColors.accentOnAccent,
       secondary: AppColors.verifiedLeaningDark,
-      onSecondary: AppColors.inkBg,
+      onSecondary: AppColors.graphiteBg,
       error: AppColors.highRiskDark,
-      onError: AppColors.inkBg,
-      surface: AppColors.inkSurface,
-      onSurface: AppColors.inkText,
-      surfaceContainerHighest: AppColors.inkBg,
-      onSurfaceVariant: AppColors.inkTextMuted,
-      outline: AppColors.inkOutline,
+      onError: AppColors.graphiteBg,
+      surface: AppColors.graphiteSurface,
+      onSurface: AppColors.graphiteText,
+      surfaceContainerHighest: AppColors.graphiteBg,
+      onSurfaceVariant: AppColors.graphiteTextMuted,
+      outline: AppColors.graphiteOutline,
     );
 
     return _build(
       scheme: scheme,
-      scaffoldBg: AppColors.inkBg,
-      ink: AppColors.inkText,
-      inkMuted: AppColors.inkTextMuted,
-      outline: AppColors.inkOutline,
+      scaffoldBg: AppColors.graphiteBg,
+      ink: AppColors.graphiteText,
+      inkMuted: AppColors.graphiteTextMuted,
+      outline: AppColors.graphiteOutline,
       riskColors: RiskColors.dark,
     );
   }
@@ -159,6 +159,24 @@ abstract final class AppTheme {
         labelStyle: textTheme.labelMedium,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+
+      // Explicit, not left to Material defaults: SegmentedButton's default
+      // selected-state styling pulls from `colorScheme.secondary`, which
+      // we deliberately set to the risk-verdict teal (see RiskColors doc
+      // comment) — left unstyled, a plain "Light/Dark/System" toggle would
+      // render its selected segment in the same teal a "Verified-leaning"
+      // badge uses, diluting that color's meaning as a risk signal rather
+      // than a generic UI affordance. Any other selection-style widget
+      // added later (FilterChip, ChoiceChip, ...) needs the same explicit
+      // treatment for the same reason.
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: SegmentedButton.styleFrom(
+          selectedBackgroundColor: scheme.primary,
+          selectedForegroundColor: scheme.onPrimary,
+          foregroundColor: ink,
+          side: BorderSide(color: outline),
+        ),
       ),
     );
   }

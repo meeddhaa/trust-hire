@@ -8,6 +8,8 @@ import '../../features/listings/presentation/listings_feed_screen.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/paywall/presentation/paywall_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
+import '../../features/settings/presentation/resume_screen.dart';
+import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/subscription/presentation/subscription_screen.dart';
 import 'splash_screen.dart';
 import '../providers/session_providers.dart';
@@ -37,6 +39,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
       GoRoute(path: '/paywall', builder: (context, state) => const PaywallScreen()),
       GoRoute(path: '/subscription', builder: (context, state) => const SubscriptionScreen()),
+      GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
+      GoRoute(path: '/settings/resume', builder: (context, state) => const ResumeScreen()),
     ],
   );
 });

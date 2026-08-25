@@ -2,6 +2,7 @@ import '../../core/constants/worker_config.dart';
 import '../../core/errors/failure.dart';
 import '../../core/network/api_client.dart';
 import '../models/match_result.dart';
+import '../models/resume_tailor_result.dart';
 import '../models/scam_assessment.dart';
 import 'firebase_auth_service.dart';
 
@@ -45,5 +46,19 @@ class WorkerApiService {
       body: {'listingId': listingId},
     );
     return ScamAssessment.fromMap(response, listingId: response['listingId'] as String);
+  }
+
+  /// Throws [NotFoundFailure] (via [ApiClient]) if the user hasn't
+  /// uploaded a resume yet — the caller (see `resume_tailor_providers.dart`)
+  /// treats that as "prompt them to upload one," not an error state.
+  Future<ResumeTailorResult> fetchResumeTailoring(String listingId) async {
+    final token = await _requireIdToken();
+    final response = await _apiClient.postJson(
+      WorkerConfig.baseUrl,
+      WorkerConfig.resumeTailorPath,
+      bearerToken: token,
+      body: {'listingId': listingId},
+    );
+    return ResumeTailorResult.fromJson(response);
   }
 }

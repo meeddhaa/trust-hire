@@ -8,7 +8,7 @@ lib/
   app.dart                      MaterialApp.router (ConsumerWidget, watches goRouterProvider)
 
   core/
-    theme/                      Color system, type scale, motion tokens ("Editorial Trust")
+    theme/                      Color system, type scale, motion tokens ("Northern Ledger")
     router/                     app_router.dart (goRouterProvider: route table + redirect
                                  guards for auth/onboarding), splash_screen.dart
     providers/                  Cross-feature Riverpod DI: repository_providers.dart
@@ -16,7 +16,8 @@ lib/
                                  (currentUidProvider, currentProfileProvider,
                                  currentSubscriptionProvider) — added beyond the original
                                  per-feature-only plan once 3+ features needed the same
-                                 profile/subscription state; see "Why core/providers/" below
+                                 profile/subscription state; see "Why core/providers/" below.
+                                 theme_mode_provider.dart: persisted light/dark/system choice
     constants/                  Firestore collection names, Worker base URL + model versions
     network/                    api_client.dart — generic JSON POST + status-to-Failure mapping,
                                  shared by worker_api_service.dart now and bdapps_api_service.dart
@@ -75,9 +76,12 @@ lib/
     subscription/               Shows real subscription state (always free today, since
                                  nothing writes paid until step 7); Unsubscribe is present
                                  but disabled until step 7 wires the real bdapps call
-    profile/                    View profile + sign out + jump to subscription. Editing
-                                 beyond what onboarding collects is a natural follow-up once
-                                 this and paywall/subscription are both settled
+    profile/                    View profile (bio, skills, experience) + gear icon to Settings.
+                                 Editing beyond what onboarding collects is a natural
+                                 follow-up once this and paywall/subscription are both settled
+    settings/                   Appearance (light/dark/system), resume upload/status +
+                                 template guide, manage subscription, sign out — see
+                                 "Decision: Settings, separate from Profile" below
 
   shared/
     widgets/                    match_score_dial.dart, trust_badge_chip.dart (promoted from
@@ -197,42 +201,77 @@ exactly the same pattern `MatchResult`/`ScamAssessment` already use
 Full model shapes and Firestore collection schema are specced in
 [docs/DATA_MODELS.md](DATA_MODELS.md).
 
-## Visual direction: Editorial Trust (confirmed)
+## Visual direction: Northern Ledger (supersedes Editorial Trust)
 
-Warm paper/ink base, single burnt-amber accent, a *separate* muted
-verdict scale (slate-teal / amber / brick) reserved for trust badges and
-match scores so they read as data, not brand decoration. Fraunces (serif)
-for score numerals and verdict headlines; Manrope (grotesk) for everything
-else. Motion is confident, not bouncy: radial arc + count-up for the match
-score, a brief hold-then-stamp for the trust badge, accordion expand (not
-modal) for the gap breakdown, staggered entrance for feed cards.
+The original confirmed direction was "Editorial Trust": warm paper/ink
+base, single burnt-amber accent, Fraunces serif for score numerals.
+Replaced after on-device testing — the person actually using the app on
+their phone wanted a different palette (a cooler, more precise feel)
+plus a light/dark/system mode toggle, which the warm/paper-vs-ink binary
+wasn't built around. Three concrete alternative directions were proposed
+(not just "redesign it" guessed at); "Northern Ledger" was chosen.
 
-Implemented in `lib/core/theme/` (`app_colors.dart`, `app_typography.dart`,
-`app_motion.dart`, `risk_colors.dart`, `app_theme.dart`). The temporary
-preview page is gone — `MatchScoreDial` and `TrustBadgeChip` (its
-score-dial and badge-reveal widgets) were promoted into
-`shared/widgets/` and are now driven by real data in `listing_detail`.
+Cool slate/graphite base, single deep indigo-violet accent (`#5B5FEF`) —
+still not blue or green, so it doesn't land on the fintech cliché the
+brief calls out, just from the violet side rather than the warm side.
+The verdict scale (slate-teal / amber / brick, kept *separate* from the
+brand accent so trust badges/match scores read as data, not brand
+decoration) is unchanged — it was never the part that needed to change.
+Type pairing (Fraunces serif for score numerals/verdict headlines,
+Manrope grotesk for everything else) and motion language (radial arc
+count-up, hold-then-stamp badge reveal, accordion gap breakdown,
+staggered feed entrance) are both also unchanged — only the color
+values moved.
 
-## Decision: no Firebase Storage, no resume upload (for now)
+Implemented in `lib/core/theme/` (`app_colors.dart` — light/dark field
+names renamed `paper*`/`ink*` → `ledger*`/`graphite*` to match the new
+identity, not left stale; `app_typography.dart`, `app_motion.dart`,
+`risk_colors.dart`, `app_theme.dart`). Appearance mode (light/dark/system)
+is now a user-facing setting, not a fixed `ThemeMode.system` — see
+`core/providers/theme_mode_provider.dart`, persisted via
+`shared_preferences` and exposed in the new Settings screen below.
 
-Firebase now requires the **Blaze** (pay-as-you-go) plan to use Storage at
-all, even at zero usage — Spark no longer supports it. That means adding a
-billing card to a bootcamp project just to hold a handful of PDFs, for a
-feature the brief only asks for conditionally ("Storage if needed for
-resume/CV upload").
+## Decision: Settings, separate from Profile
 
-Decided against it: onboarding collects skills, experience, and education
-as typed structured input instead of a parsed resume. This is what
-actually feeds the match-gap Gemini call anyway (`UserProfile.skills` diffed
-against `JobListing.requiredSkills`) — a resume would need parsing into
-the same structured shape regardless, so skipping the upload step removes
-a dependency (Storage, a PDF parser) without changing what the AI feature
-does. `UserProfile.resumeStoragePath` stays in the model as a nullable,
-currently-unused field — cheap to leave in, and re-enabling upload later
-(if the team decides it's worth the Blaze upgrade) needs no schema change,
-just wiring a picker + Storage service back in.
+Originally, sign-out and "manage subscription" lived directly on the
+Profile screen (see the now-superseded description in `## Status`
+below). Split out once appearance mode and resume management needed a
+home too: Profile now shows only "who you are" (bio, skills,
+experience); Settings (`/settings`, reached via a gear icon on Profile)
+holds "how the app behaves for you" — appearance, resume upload/status,
+manage subscription, sign out.
 
-`storage.rules` stays in the repo, unused, for the same reason.
+## Decision: Firebase Storage and resume upload, reconsidered
+
+Firebase requires the **Blaze** (pay-as-you-go) plan to use Storage at
+all, even at zero usage — Spark doesn't support it. Originally decided
+against enabling it for exactly that reason: onboarding collected skills
+as typed input instead of a parsed resume, and `UserProfile.resumeStoragePath`
+was left in the model, nullable and unused, in case this got revisited.
+
+It got revisited: after using the app, real resume-based matching (not
+just typed skill chips) was specifically asked for, along with an actual
+Gemini-powered resume-tailoring feature per listing — a materially
+different, higher-value AI feature than typed-skill matching alone, and
+worth the Blaze upgrade for. `storage.rules` (owner-only, PDF-only, 10MB
+cap) was already written and just needed deploying once Storage was
+enabled.
+
+**How the PDF reaches Gemini**: no separate text-extraction step. The
+Worker's `/v1/resume-tailor` endpoint fetches the raw PDF bytes straight
+from Cloud Storage (`storageClient.ts`, read-only GCS REST access on the
+same service-account token as Firestore — scope extended in
+`serviceAccountAuth.ts`, which both clients now share) and sends them to
+Gemini as inline document data (`gemini.ts`'s `InlineFile` parts) —
+Gemini reads PDF content natively. Simpler and more robust than adding a
+PDF-parsing library, and one less thing that can silently mis-extract
+text from a resume's layout.
+
+**Why resume-tailoring isn't cached** (unlike `MatchResult`/`ScamAssessment`):
+a resume can change anytime and this is a lower-traffic, user-triggered
+action (a button, not eager on page load) — caching would risk serving
+stale advice against an old resume for a marginal quota saving. It still
+counts against the same per-user daily rate limit as match/scam calls.
 
 ## Decision: JSearch for real listings, not a hand-written seed set
 

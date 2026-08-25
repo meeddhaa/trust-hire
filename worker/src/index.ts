@@ -1,10 +1,18 @@
 import { AuthError, extractBearerToken, verifyFirebaseIdToken } from './auth';
 import { getDocument, setDocument } from './firestoreClient';
 import { callGeminiForJson, GeminiError } from './gemini';
-import { buildMatchPrompt, buildScamPrompt, MATCH_RESPONSE_SCHEMA, SCAM_RESPONSE_SCHEMA } from './prompts';
+import {
+  buildMatchPrompt,
+  buildResumeTailorPrompt,
+  buildScamPrompt,
+  MATCH_RESPONSE_SCHEMA,
+  RESUME_TAILOR_RESPONSE_SCHEMA,
+  SCAM_RESPONSE_SCHEMA,
+} from './prompts';
 import { checkAndConsumeRateLimit } from './rateLimiter';
 import { bandTrustBadge, computeRuleScore, computeScamRuleFlags } from './scamRules';
-import type { JobListingDoc, MatchGeminiResult, ScamGeminiResult, UserProfileDoc } from './types';
+import { getStorageObjectBase64 } from './storageClient';
+import type { JobListingDoc, MatchGeminiResult, ResumeTailorGeminiResult, ScamGeminiResult, UserProfileDoc } from './types';
 
 /**
  * Cloudflare Worker: the Gemini relay named in the brief. Holds the API
@@ -135,6 +143,32 @@ async function handleScamAssessment(request: Request, env: Env, uid: string): Pr
   return json({ listingId, ...doc, computedAt: computedAt.toISOString() });
 }
 
+async function handleResumeTailor(request: Request, env: Env, uid: string): Promise<Response> {
+  const listingId = await readListingId(request);
+
+  const listing = await getDocument(env, `listings/${listingId}`);
+  if (!listing) return errorResponse(404, `No listing with id "${listingId}"`);
+
+  const resumeBase64 = await getStorageObjectBase64(env, `resumes/${uid}/resume.pdf`);
+  if (!resumeBase64) return errorResponse(404, 'Upload a resume in Settings before tailoring it');
+
+  const rateLimit = await checkAndConsumeRateLimit(env, uid);
+  if (!rateLimit.allowed) {
+    return errorResponse(429, `Daily AI request limit (${rateLimit.limit}) reached — try again tomorrow`);
+  }
+
+  const { systemInstruction, userPrompt } = buildResumeTailorPrompt(listing as unknown as JobListingDoc);
+  const result = await callGeminiForJson<ResumeTailorGeminiResult>(
+    env,
+    systemInstruction,
+    userPrompt,
+    RESUME_TAILOR_RESPONSE_SCHEMA,
+    [{ mimeType: 'application/pdf', base64Data: resumeBase64 }],
+  );
+
+  return json({ listingId, ...result });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -152,6 +186,7 @@ export default {
 
       if (url.pathname === '/v1/match') return await handleMatch(request, env, uid);
       if (url.pathname === '/v1/scam-assessment') return await handleScamAssessment(request, env, uid);
+      if (url.pathname === '/v1/resume-tailor') return await handleResumeTailor(request, env, uid);
       return errorResponse(404, 'Unknown endpoint');
     } catch (err) {
       if (err instanceof AuthError) return errorResponse(401, err.message);
