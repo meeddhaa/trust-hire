@@ -333,14 +333,25 @@ iterating on the Firestore mapping never costs API quota.
 - [ ] bdapps API integration (paywall/subscription UI exists; the actual
   checkout + webhook + unsubscribe call are step 7)
 
-### Not yet verified
+### Verified on a real device, against real seeded data
 
-Sign-in and onboarding are confirmed working on a real device. Still
-untested interactively: opening a real seeded listing and confirming the
-match score + trust badge render correctly against a live Worker
-response (not the throwaway smoketest data from step 3, which was
-deleted afterward) — the feed itself, the free/paid gating banner, the
-in-app WebView opening a real `job_apply_link`, and the paywall/
-subscription/profile screens. All compile and typecheck cleanly, and the
-underlying data (real listings, live Worker) is now in place for this to
-actually be checked next.
+Sign-in, onboarding, the feed, and listing detail all confirmed working
+live — not just compiled — on a physical phone over USB, against the 54
+listings seeded via `scripts/seed-listings/`:
+
+- Feed renders real listings (Nucs AI, Goinnovior Limited, Sparkrock,
+  ...) with skill chips, location, and the instant client-side trust
+  badge, with the staggered entrance animation.
+- Opening a listing triggers a real `MatchRepository`/`ScamRepository`
+  call through to the Worker: match score dial revealed a real
+  Gemini-computed percentage (5% against the test profile's skills vs.
+  a senior role's Kubernetes/TypeScript/React/SQL requirements — low,
+  but that's the model being accurately discriminating, not a bug), and
+  the trust badge landed on "Verified-leaning" with all five rule-flag
+  checklist items correctly showing clear for a real, clean listing.
+- Free-tier gating banner ("Unlock the full gap breakdown...") rendered
+  correctly in place of the paid-only reasoning/roadmap section.
+
+Still untested interactively: a scam-example listing's high-risk/caution
+path (only a clean listing was opened so far), the in-app WebView opening
+a real `job_apply_link`, and the paywall/subscription/profile screens.
