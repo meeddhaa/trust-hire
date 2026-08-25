@@ -1,0 +1,5 @@
+node_modules/
+.env
+# Raw third-party API responses — regenerable via `npm run fetch`, and not
+# something to redistribute in version control (RapidAPI/JSearch ToS).
+.cache/

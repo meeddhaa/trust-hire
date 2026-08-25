@@ -1,0 +1,14 @@
+{
+  "name": "trusthire-seed-listings",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "One-time/occasional seed script: pulls real Bangladesh job listings from the JSearch API, maps them into the JobListing shape, mixes in a handful of hand-authored scam-pattern examples, and writes everything to Firestore's listings collection.",
+  "scripts": {
+    "fetch": "node --env-file=.env fetchJSearch.mjs",
+    "seed": "node --env-file=.env seed.mjs"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0"
+  }
+}

@@ -5,50 +5,118 @@
 ```
 lib/
   main.dart                     Entry point: Firebase init, ProviderScope, App
-  app.dart                      MaterialApp.router, theme wiring, go_router
+  app.dart                      MaterialApp.router (ConsumerWidget, watches goRouterProvider)
 
   core/
     theme/                      Color system, type scale, motion tokens ("Editorial Trust")
-    router/                     go_router route table + guards (auth, onboarding, paywall)
-    constants/                  Env keys, Firestore collection names, remote config defaults
-    network/                    HTTP client wrapper for the Cloudflare Worker + bdapps API
-    errors/                     Typed failures (NetworkFailure, AuthFailure, ...) + mapping
-    utils/                      Small pure helpers (formatters, validators)
+    router/                     app_router.dart (goRouterProvider: route table + redirect
+                                 guards for auth/onboarding), splash_screen.dart
+    providers/                  Cross-feature Riverpod DI: repository_providers.dart
+                                 (one Provider per repository/service), session_providers.dart
+                                 (currentUidProvider, currentProfileProvider,
+                                 currentSubscriptionProvider) — added beyond the original
+                                 per-feature-only plan once 3+ features needed the same
+                                 profile/subscription state; see "Why core/providers/" below
+    constants/                  Firestore collection names, Worker base URL + model versions
+    network/                    api_client.dart — generic JSON POST + status-to-Failure mapping,
+                                 shared by worker_api_service.dart now and bdapps_api_service.dart
+                                 in step 7
+    errors/                     failure.dart — Failure hierarchy, implements Exception so
+                                 repositories `throw` it and AsyncNotifier/FutureProvider
+                                 capture it into AsyncValue.error automatically
+    utils/                      firestore_codec.dart (Timestamp<->DateTime)
 
   data/
-    models/                     User, JobListing, MatchResult, ScamAssessment, Subscription
-    repositories/                One repository per domain area, hides Firestore/HTTP details
-                                 from features (ListingsRepository, MatchRepository,
-                                 ScamRepository, SubscriptionRepository, ProfileRepository)
-    services/                    Thin wrappers around external SDKs/APIs:
-                                 - firebase_auth_service.dart
-                                 - firestore_service.dart
-                                 - worker_api_service.dart   (Gemini relay calls)
-                                 - scam_rule_engine.dart     (client-side deterministic scorer)
-                                 - bdapps_api_service.dart   (subscription + unsubscribe)
-    seed/                       Curated real BD job listings + realistic scam examples,
-                                 loaded into Firestore via a one-time seed script
+    models/                     UserProfile, JobListing, MatchResult, ScamAssessment,
+                                 ScamRuleFlags, Subscription
+    repositories/                ProfileRepository, ListingsRepository, MatchRepository,
+                                 ScamRepository, SubscriptionRepository — Match/Scam check a
+                                 direct Firestore read first, only call the Worker on a miss
+                                 or stale modelVersion (see "Data flow" below)
+    services/                    - firebase_auth_service.dart  (email + Google sign-in)
+                                 - worker_api_service.dart      (Gemini relay calls)
+                                 - scam_rule_engine.dart        (client-side deterministic scorer)
+                                 - bdapps_api_service.dart      (step 7 — not built yet)
+                                 No separate firestore_service.dart: repositories call
+                                 `FirebaseFirestore.instance` directly — cloud_firestore's own
+                                 API is already a clean-enough abstraction at this project's
+                                 size; adding another wrapper layer would be indirection with
+                                 no payoff (see pubspec's own "avoid overengineering" note)
+    seed/                       Curated real BD job listings + realistic scam examples —
+                                 step 5, not built yet (empty listings collection today)
 
   features/                     One folder per screen/flow. Each has:
                                    presentation/  screens + feature-local widgets
                                    providers/     Riverpod providers/notifiers for that flow
+    auth/                       Sign in / sign up (email + Google) — added beyond the
+                                 original plan, which didn't list a dedicated auth feature;
+                                 kept separate from onboarding since "authenticate" and
+                                 "build a profile" are genuinely different concerns and
+                                 the router needs auth state independent of profile state
     onboarding/                 Profile build (skills, experience — typed, no resume upload;
                                  see "Storage" decision below)
-    listings/                   Feed: swipeable/scrollable list of JobListingCards
-    listing_detail/             Match breakdown, trust badge, in-app WebView to source posting
-    paywall/                    bdapps DCB subscription screen
-    subscription/               Manage/unsubscribe flow
-    profile/                    View/edit profile after onboarding
+    listings/                   Feed: scrollable, staggered-entrance list of JobListingCards.
+                                 Cards show the trust badge only (instant, free, client-side) —
+                                 not a match score, which needs a Worker/Gemini call; showing
+                                 that on every card would mean firing it on every feed scroll,
+                                 exactly the quota-burning the brief warns against for scam
+                                 scoring. The real match score is this build's centerpiece one
+                                 screen deeper, in listing_detail, computed once and cached.
+    listing_detail/             Match breakdown, trust badge + reasoning, in-app WebView to
+                                 source posting. Free tier: match % + trust badge + rule flags
+                                 (deterministic, cheap, shown regardless of tier). Paid tier
+                                 adds: gap/matched skills, upskilling roadmap, LLM scam
+                                 reasoning paragraph — gated by `currentSubscriptionProvider`
+                                 in the UI layer only, per the data models' own design
+    paywall/                    Tier comparison + "Subscribe via bdapps" — real, designed UI;
+                                 the actual bdapps checkout is step 7, so tapping Subscribe
+                                 today explains that honestly instead of faking a charge
+    subscription/               Shows real subscription state (always free today, since
+                                 nothing writes paid until step 7); Unsubscribe is present
+                                 but disabled until step 7 wires the real bdapps call
+    profile/                    View profile + sign out + jump to subscription. Editing
+                                 beyond what onboarding collects is a natural follow-up once
+                                 this and paywall/subscription are both settled
 
   shared/
-    widgets/                    Cross-feature UI: MatchScoreDial, TrustBadge, EmptyState, etc.
-    animations/                 Shared motion primitives (reveal curves, staggered list entries)
+    widgets/                    match_score_dial.dart, trust_badge_chip.dart (promoted from
+                                 the design-direction preview once screens needed them),
+                                 empty_state.dart, expandable_section.dart (accordion for the
+                                 gap breakdown — custom-built, not ExpansionTile, so the
+                                 chevron/spacing matches "Editorial Trust" exactly)
+    animations/                 Not yet needed as a separate layer — the motion so far is
+                                 short enough to write inline with flutter_animate at each
+                                 use site (AppMotion tokens keep it consistent); revisit if a
+                                 reveal sequence gets reused identically across 3+ places
 
-test/                           Mirrors lib/ for unit + widget tests
-worker/                         Cloudflare Worker (Gemini relay, rate limiting, scam scorer)
+test/                           Mirrors lib/ for unit + widget tests. Firebase-backed
+                                 providers (auth state, and anything downstream of it,
+                                 including the router) need a Firebase test harness this
+                                 project doesn't have set up yet, so current coverage is
+                                 scoped to what's testable without one: scam_rule_engine_test.dart
+                                 (mirrors worker/test/scamRules.test.ts) and a SplashScreen
+                                 smoke test. Widening this is a good next investment once the
+                                 screens themselves stop changing shape.
+worker/                         Cloudflare Worker (Gemini relay, rate limiting, scam scorer) —
+                                 deployed, see worker/README.md
 web_landing/                    Responsive static landing page (subscription info, bdapps req.)
+                                 — not built yet
 docs/                           This file, schema notes, decision log
 ```
+
+## Why `core/providers/`
+
+The original plan put providers only under each feature's own `providers/`
+folder. That held up until `listing_detail` (free/paid gating),
+`onboarding` (the redirect-away-once-complete check), `profile`, and
+`paywall`/`subscription` all needed the *same* live profile and
+subscription state. Four features re-deriving the same Firestore stream
+independently would mean four places to keep in sync, and StreamProviders
+aren't naturally "owned" by any one feature when the router itself also
+needs to read them synchronously for redirect guards. `core/providers/`
+holds exactly two kinds of thing: DI wiring for repositories/services
+(`repository_providers.dart`) and this cross-feature session state
+(`session_providers.dart`) — nothing feature-specific has moved there.
 
 ## Why this shape
 
@@ -87,7 +155,25 @@ Chosen over:
 Declarative routes so paywall and listing-detail can be pushed as distinct
 routes (needed for the in-app WebView back stack and for a clean deep link
 into a specific listing later), with redirect-based guards for
-"not onboarded → onboarding" and "free user hitting a paid action → paywall".
+"not signed in → sign-in", "signed in but not onboarded → onboarding", and
+"onboarded, at sign-in/onboarding/'/' → listings feed".
+
+Built as `goRouterProvider` (a Riverpod `Provider<GoRouter>`), not a
+top-level `final` — `redirect` needs to read live auth/profile state
+synchronously, which only works if it has a `ref` in scope. A single
+`GoRouter` instance stays alive across auth changes (recreating it on
+every sign-in would reset the whole nav stack); a `ChangeNotifier` bridges
+`ref.listen` on `authStateProvider`/`currentProfileProvider` to
+`GoRouter`'s `refreshListenable`, which is what makes it re-run `redirect`
+after either changes. See `core/router/app_router.dart`.
+
+Paid-action gating (free user hitting a paid-only action) turned out not
+to need a router guard: `listing_detail` just conditionally renders the
+gap-breakdown/roadmap/reasoning sections based on
+`currentSubscriptionProvider`, with an inline "Upgrade" prompt in place of
+the locked content — simpler than intercepting navigation, and it's
+exactly the same pattern `MatchResult`/`ScamAssessment` already use
+(fetch the full object regardless of tier, gate what renders).
 
 ## Data flow: match + scam assessment
 
@@ -118,9 +204,10 @@ score, a brief hold-then-stamp for the trust badge, accordion expand (not
 modal) for the gap breakdown, staggered entrance for feed cards.
 
 Implemented in `lib/core/theme/` (`app_colors.dart`, `app_typography.dart`,
-`app_motion.dart`, `risk_colors.dart`, `app_theme.dart`). Runnable preview
-at `lib/shared/widgets/theme_preview_page.dart` (temporary — see its doc
-comment; gets replaced by the real listings feed in step 4).
+`app_motion.dart`, `risk_colors.dart`, `app_theme.dart`). The temporary
+preview page is gone — `MatchScoreDial` and `TrustBadgeChip` (its
+score-dial and badge-reveal widgets) were promoted into
+`shared/widgets/` and are now driven by real data in `listing_detail`.
 
 ## Decision: no Firebase Storage, no resume upload (for now)
 
@@ -174,6 +261,27 @@ just wiring a picker + Storage service back in.
     uncaught `SyntaxError` past the intended `AuthError` handling, landing
     on a generic 500 instead of a clean 401 — now wrapped so any decode
     failure normalizes to `AuthError`, with regression tests added
-- [ ] Screens
+- [x] Screens — auth (sign in/up, email + Google), onboarding, listings
+  feed, listing detail (real match score + trust badge, free/paid gating,
+  in-app WebView), profile, paywall, subscription. All wired to Firestore
+  and the Worker through repositories; router redirect guards drive the
+  auth → onboarding → feed flow. Not yet exercised on a real device or
+  against seeded data — `flutter analyze` and `flutter test` are clean,
+  but the feed will show its empty state until step 5 seeds `listings`,
+  and sign-in itself hasn't been run interactively (see "Not yet verified"
+  below)
 - [ ] Web landing page
-- [ ] bdapps API integration
+- [ ] bdapps API integration (paywall/subscription UI exists; the actual
+  checkout + webhook + unsubscribe call are step 7)
+
+### Not yet verified
+
+Everything above compiles and typechecks, and the AI pipeline itself was
+proven live in step 3's smoke test (real Gemini calls, real Firestore
+writes) — but the screens built in this step haven't been run
+interactively on a device/emulator yet, only statically analyzed. Before
+calling step 4 done: sign in (email + Google) end-to-end, complete
+onboarding, confirm the router guards actually redirect correctly, and —
+once step 5 seeds real listings — open a listing and confirm the match
+score and trust badge render against a real Worker response, not just a
+mocked one.
