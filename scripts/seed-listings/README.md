@@ -43,6 +43,7 @@ Accounts → "Generate new private key". Same one used for the Worker
 ```bash
 npm run fetch   # only when you actually want fresh listings; costs quota
 npm run seed    # safe to re-run anytime — idempotent (see below)
+node --env-file=.env verify.mjs   # spot-check counts + a sample doc after seeding
 ```
 
 ## Notes on the data
