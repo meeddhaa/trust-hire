@@ -10,10 +10,12 @@ import '../../../data/models/job_listing.dart';
 import '../../../data/models/match_result.dart';
 import '../../../data/models/resume_tailor_result.dart';
 import '../../../data/models/scam_assessment.dart';
+import '../../../shared/widgets/company_avatar.dart';
 import '../../../shared/widgets/expandable_section.dart';
 import '../../../shared/widgets/match_score_dial.dart';
 import '../../../shared/widgets/trust_badge_chip.dart';
 import '../../applications/providers/applications_providers.dart';
+import '../../saved_jobs/providers/saved_jobs_providers.dart';
 import '../providers/listing_detail_providers.dart';
 import '../providers/resume_tailor_providers.dart';
 import 'source_webview_screen.dart';
@@ -35,7 +37,21 @@ class ListingDetailScreen extends ConsumerWidget {
     final listingAsync = ref.watch(listingByIdProvider(listingId));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Listing')),
+      // Transparent + extendBodyBehindAppBar so the hero banner (see
+      // `_ListingDetailBody`) scrolls up under the status bar with the
+      // back button floating on top of it — the reference's "circular
+      // icon buttons over a photo header" pattern, applied to our colored
+      // banner instead of a photo (see that widget's doc comment for why).
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: Padding(
+          padding: const EdgeInsets.all(8),
+          child: _CircleIconButton(icon: Icons.arrow_back_rounded, onTap: () => context.pop()),
+        ),
+      ),
       body: listingAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(child: Padding(
@@ -65,72 +81,167 @@ class _ListingDetailBody extends ConsumerWidget {
     final isPaid = subscription?.isPaid ?? false;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+      padding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(listing.title, style: text.headlineMedium),
-          const SizedBox(height: 4),
-          Text(listing.company, style: text.bodyLarge),
-          const SizedBox(height: 4),
-          Text(
-            '${listing.location}${listing.isRemote ? ' · Remote' : ''}',
-            style: text.bodyMedium,
-          ),
-          const SizedBox(height: 16),
-          _ApplicationStatusRow(listingId: listing.id),
-          const SizedBox(height: 20),
+          _HeroBanner(listing: listing),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _ApplicationStatusRow(listingId: listing.id),
+                const SizedBox(height: 20),
 
-          _MatchSection(listing: listing, isPaid: isPaid),
-          const SizedBox(height: 20),
-          _TrustSection(listing: listing, isPaid: isPaid),
-          const SizedBox(height: 20),
+                _MatchSection(listing: listing, isPaid: isPaid),
+                const SizedBox(height: 20),
+                _TrustSection(listing: listing, isPaid: isPaid),
+                const SizedBox(height: 20),
+                _DescriptionSection(listing: listing),
+                const SizedBox(height: 20),
 
-          if (isPaid) ...[
-            _ResumeTailorSection(listing: listing),
-            const SizedBox(height: 20),
-          ],
+                if (isPaid) ...[
+                  _ResumeTailorSection(listing: listing),
+                  const SizedBox(height: 20),
+                ],
 
-          if (!isPaid)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    const Icon(Icons.lock_outline_rounded),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Unlock the full gap breakdown, upskilling roadmap, and scam-risk reasoning.',
-                        style: text.bodyMedium,
+                if (!isPaid)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.lock_outline_rounded),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Unlock the full gap breakdown, upskilling roadmap, and scam-risk reasoning.',
+                              style: text.bodyMedium,
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => context.push('/paywall'),
+                            child: const Text('Upgrade'),
+                          ),
+                        ],
                       ),
                     ),
-                    TextButton(
-                      onPressed: () => context.push('/paywall'),
-                      child: const Text('Upgrade'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+                  ),
 
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => SourceWebviewScreen(url: listing.sourceUrl, title: listing.company),
-              ),
+                const SizedBox(height: 20),
+                // Filled/pill, not outlined — the closest thing this app
+                // has to the reference's bold "Apply for this Job" CTA
+                // (we redirect to the original posting rather than
+                // hosting our own application flow).
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => SourceWebviewScreen(url: listing.sourceUrl, title: listing.company),
+                    ),
+                  ),
+                  icon: const Icon(Icons.open_in_new_rounded),
+                  label: const Text('View original posting'),
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: () => context.go('/job-coach?listingId=${listing.id}'),
+                  icon: const Icon(Icons.school_outlined),
+                  label: const Text('Get Job Coach advice'),
+                ),
+              ],
             ),
-            icon: const Icon(Icons.open_in_new_rounded),
-            label: const Text('View original posting'),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: () => context.go('/job-coach?listingId=${listing.id}'),
-            icon: const Icon(Icons.school_outlined),
-            label: const Text('Get Job Coach advice'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The colored "hero" banner replacing the reference's photo header — see
+/// `job_listing_card.dart`'s doc comment for why a flat color stands in
+/// for a real photo here too. Scrolls up under the transparent AppBar's
+/// floating back button (see `ListingDetailScreen`'s `extendBodyBehindAppBar`).
+class _HeroBanner extends ConsumerWidget {
+  const _HeroBanner({required this.listing});
+
+  final JobListing listing;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final text = Theme.of(context).textTheme;
+    final panelColor = CompanyAvatar.colorFor(listing.company);
+    final topInset = MediaQuery.of(context).padding.top + kToolbarHeight;
+    final uid = ref.read(currentUidProvider);
+    final isSaved = ref.watch(isJobSavedProvider(listing.id)).valueOrNull ?? false;
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(20, topInset + 12, 20, 20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [panelColor.withValues(alpha: 0.85), Color.lerp(panelColor, Colors.black, 0.55)!],
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Spacer(),
+              _CircleIconButton(
+                icon: isSaved ? Icons.bookmark : Icons.bookmark_border,
+                active: isSaved,
+                onTap: uid == null
+                    ? null
+                    : () {
+                        final repo = ref.read(savedJobRepositoryProvider);
+                        if (isSaved) {
+                          repo.unsave(uid: uid, listingId: listing.id);
+                        } else {
+                          repo.save(uid: uid, listingId: listing.id);
+                        }
+                      },
+              ),
+            ],
+          ),
+          const SizedBox(height: 28),
+          Text(listing.title, style: text.headlineMedium?.copyWith(color: Colors.white)),
+          const SizedBox(height: 4),
+          Text(listing.company, style: text.bodyLarge?.copyWith(color: Colors.white70)),
+          const SizedBox(height: 2),
+          Text(
+            '${listing.location}${listing.isRemote ? ' · Remote' : ''}',
+            style: text.bodyMedium?.copyWith(color: Colors.white70),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CircleIconButton extends StatelessWidget {
+  const _CircleIconButton({required this.icon, this.active = false, required this.onTap});
+
+  final IconData icon;
+  final bool active;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
+    return Material(
+      color: Colors.white.withValues(alpha: 0.9),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Icon(icon, size: 20, color: active ? accent : Colors.black87),
+        ),
       ),
     );
   }
@@ -241,6 +352,34 @@ class _ApplicationStatusRow extends ConsumerWidget {
   }
 }
 
+/// Small icon-in-circle + title row, echoing the profile screen's info-row
+/// language — used as the header for every card on this screen so the
+/// page reads as a set of consistent, scannable sections rather than each
+/// card inventing its own header style.
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.icon, required this.title});
+
+  final IconData icon;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    return Row(
+      children: [
+        CircleAvatar(
+          radius: 16,
+          backgroundColor: scheme.primary.withValues(alpha: 0.12),
+          child: Icon(icon, size: 16, color: scheme.primary),
+        ),
+        const SizedBox(width: 10),
+        Text(title, style: text.titleLarge),
+      ],
+    );
+  }
+}
+
 class _MatchSection extends ConsumerWidget {
   const _MatchSection({required this.listing, required this.isPaid});
 
@@ -258,7 +397,7 @@ class _MatchSection extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Your match', style: text.titleLarge),
+            const _SectionHeader(icon: Icons.insights_outlined, title: 'Your match'),
             const SizedBox(height: 12),
             matchAsync.when(
               loading: () => const Padding(
@@ -385,7 +524,7 @@ class _TrustSection extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Trust & safety', style: text.titleLarge),
+            const _SectionHeader(icon: Icons.shield_outlined, title: 'Trust & safety'),
             const SizedBox(height: 12),
             scamAsync.when(
               loading: () => const Padding(
@@ -469,6 +608,32 @@ class _TrustContent extends StatelessWidget {
   }
 }
 
+/// The listing's full raw text, collapsed by default — echoes the
+/// reference's "Responsibilities / Requirements / Benefits" accordion
+/// pattern, but as a single section: JSearch's listings arrive as one
+/// unstructured description blob, not pre-split into those categories, and
+/// synthetically splitting it would risk misrepresenting what the
+/// original posting actually says.
+class _DescriptionSection extends StatelessWidget {
+  const _DescriptionSection({required this.listing});
+
+  final JobListing listing;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: ExpandableSection(
+          title: 'Job description',
+          child: Text(listing.description, style: text.bodyMedium),
+        ),
+      ),
+    );
+  }
+}
+
 /// Paid-tier-only, on-demand: tapping the button calls the Worker's
 /// `/v1/resume-tailor` endpoint (a heavier Gemini call, reading the
 /// uploaded resume PDF directly — see `worker/src/index.ts`), rather than
@@ -499,7 +664,7 @@ class _ResumeTailorSection extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Tailor my resume', style: text.titleLarge),
+            const _SectionHeader(icon: Icons.auto_fix_high_outlined, title: 'Tailor my resume'),
             const SizedBox(height: 4),
             Text(
               'Grounded in your uploaded resume — see Settings > Resume.',

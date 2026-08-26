@@ -14,11 +14,11 @@ class MainShell extends StatelessWidget {
   final StatefulNavigationShell navigationShell;
 
   static const _destinations = [
-    NavigationDestination(icon: Icon(Icons.work_outline_rounded), label: 'Jobs'),
-    NavigationDestination(icon: Icon(Icons.assignment_outlined), label: 'Applications'),
-    NavigationDestination(icon: Icon(Icons.bookmark_border_rounded), label: 'Saved'),
-    NavigationDestination(icon: Icon(Icons.school_outlined), label: 'Job Coach'),
-    NavigationDestination(icon: Icon(Icons.person_outline_rounded), label: 'Profile'),
+    (Icons.work_outline_rounded, Icons.work_rounded, 'Jobs'),
+    (Icons.assignment_outlined, Icons.assignment_rounded, 'Applications'),
+    (Icons.bookmark_border_rounded, Icons.bookmark_rounded, 'Saved'),
+    (Icons.school_outlined, Icons.school_rounded, 'Job Coach'),
+    (Icons.person_outline_rounded, Icons.person_rounded, 'Profile'),
   ];
 
   @override
@@ -26,8 +26,14 @@ class MainShell extends StatelessWidget {
     return Scaffold(
       drawer: const AppDrawer(),
       body: navigationShell,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: navigationShell.currentIndex,
+      // Not extendBody: true — the nav bar is visually "floating" (margin,
+      // rounded stadium) but still reserves its own layout height, so a
+      // long list's last item scrolls to rest above it rather than
+      // needing every branch screen to hand-tune bottom padding to avoid
+      // being obscured underneath.
+      bottomNavigationBar: _FloatingNavBar(
+        currentIndex: navigationShell.currentIndex,
+        destinations: _destinations,
         onDestinationSelected: (index) => navigationShell.goBranch(
           index,
           // Tapping the already-selected tab pops it back to its root,
@@ -35,7 +41,96 @@ class MainShell extends StatelessWidget {
           // nothing.
           initialLocation: index == navigationShell.currentIndex,
         ),
-        destinations: _destinations,
+      ),
+    );
+  }
+}
+
+/// A floating rounded-stadium bar with circular per-icon active states —
+/// not the stock Material [NavigationBar] — per the user-supplied
+/// reference's bottom nav: individual circular icon buttons, the active
+/// one filled solid in the accent color, rather than one shared indicator
+/// pill sliding under a row of icon+label pairs.
+class _FloatingNavBar extends StatelessWidget {
+  const _FloatingNavBar({
+    required this.currentIndex,
+    required this.destinations,
+    required this.onDestinationSelected,
+  });
+
+  final int currentIndex;
+  final List<(IconData, IconData, String)> destinations;
+  final ValueChanged<int> onDestinationSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return SafeArea(
+      minimum: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      child: Container(
+        height: 64,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(32),
+          border: Border.all(color: scheme.outline),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            for (var i = 0; i < destinations.length; i++)
+              _NavIcon(
+                outlineIcon: destinations[i].$1,
+                filledIcon: destinations[i].$2,
+                label: destinations[i].$3,
+                selected: i == currentIndex,
+                onTap: () => onDestinationSelected(i),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NavIcon extends StatelessWidget {
+  const _NavIcon({
+    required this.outlineIcon,
+    required this.filledIcon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData outlineIcon;
+  final IconData filledIcon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: label,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: selected ? scheme.primary : Colors.transparent,
+          ),
+          child: Icon(
+            selected ? filledIcon : outlineIcon,
+            color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
+            size: 22,
+          ),
+        ),
       ),
     );
   }

@@ -5,28 +5,27 @@ import 'package:intl/intl.dart';
 import '../../../../core/providers/repository_providers.dart';
 import '../../../../core/providers/session_providers.dart';
 import '../../../../core/theme/app_motion.dart';
-import '../../../../core/theme/risk_colors.dart';
 import '../../../../data/models/job_listing.dart';
-import '../../../../data/models/scam_assessment.dart';
 import '../../../../data/services/scam_rule_engine.dart';
+import '../../../../shared/widgets/company_avatar.dart';
 import '../../../../shared/widgets/trust_badge_chip.dart';
 import '../../../saved_jobs/providers/saved_jobs_providers.dart';
 
-/// A listing in the feed. Shows only the trust badge, computed instantly
-/// and client-side by [ScamRuleEngine] — not a match score, which needs a
-/// (cached) Gemini call per `MatchRepository`. Firing that per card on
-/// every feed scroll is exactly the API-quota-burning the brief warns
-/// against for scam scoring, and the same reasoning extends to match
-/// scoring: it only gets computed once a listing is actually opened (see
-/// `listing_detail`), where the real number becomes the screen's
-/// centerpiece.
+/// A listing in the feed, restyled as a "hero panel" card per the
+/// user-supplied dark photo-card reference: a colored block up top with
+/// the badge tag / bookmark / title / salary overlaid, then a meta row
+/// below.
+///
+/// The reference's panel is a real photo of the workspace; ours is a flat
+/// color instead (see [CompanyAvatar.colorFor], the same deterministic
+/// per-company color used for the small round avatar elsewhere) — JSearch
+/// gives no listing imagery, and placing a stock/generic photo next to a
+/// real employer's name would misrepresent them. The trust badge (this
+/// app's actual reason to exist, and absent from the reference entirely)
+/// stays in the meta row below the panel rather than being dropped for
+/// fidelity to the reference.
 class JobListingCard extends ConsumerWidget {
-  const JobListingCard({
-    super.key,
-    required this.listing,
-    required this.onTap,
-    this.staggerIndex = 0,
-  });
+  const JobListingCard({super.key, required this.listing, required this.onTap, this.staggerIndex = 0});
 
   final JobListing listing;
   final VoidCallback onTap;
@@ -42,191 +41,217 @@ class JobListingCard extends ConsumerWidget {
     if (min == null && max == null) return null;
     final currency = listing.salaryCurrency;
     if (min != null && max != null) {
-      return '${_salaryFormat.format(min)}–${_salaryFormat.format(max)} $currency/mo';
+      return '${_salaryFormat.format(min)}–${_salaryFormat.format(max)} $currency';
     }
-    return '${_salaryFormat.format(min ?? max)} $currency/mo';
+    return '${_salaryFormat.format(min ?? max)} $currency';
   }
 
-  static Color _borderColorFor(TrustBadge badge, RiskColors risk) =>
-      switch (badge) {
-        TrustBadge.verifiedLeaning => risk.verifiedLeaning,
-        TrustBadge.caution => risk.caution,
-        TrustBadge.highRisk => risk.highRisk,
-      };
+  /// A real, honest "freshness" signal (unlike the reference's fabricated
+  /// applicant counts, which nothing in this app's data actually
+  /// supports) — how long ago the listing was posted, from real seeded
+  /// data.
+  String get _postedAgo {
+    final days = DateTime.now().difference(listing.postedAt).inDays;
+    if (days <= 0) return 'Today';
+    if (days == 1) return 'Yesterday';
+    if (days < 7) return '${days}d ago';
+    final weeks = days ~/ 7;
+    return '${weeks}w ago';
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final text = Theme.of(context).textTheme;
-    final risk = Theme.of(context).extension<RiskColors>()!;
     final assessment = ScamRuleEngine.assess(listing);
-    final borderColor = _borderColorFor(assessment.trustBadge, risk);
+    final panelColor = CompanyAvatar.colorFor(listing.company);
     final salaryLine = _salaryLine;
-    final isSaved =
-        ref.watch(isJobSavedProvider(listing.id)).valueOrNull ?? false;
+    final isSaved = ref.watch(isJobSavedProvider(listing.id)).valueOrNull ?? false;
     final uid = ref.read(currentUidProvider);
 
     return Card(
-          // A colored left rail, not a full-card tint — lets the trust badge's
-          // signal be scanned at a glance down the feed without the color
-          // fighting the card's actual content, and without a "this whole
-          // listing is a solid color" look reading as more alarming/exciting
-          // than the badge text alone.
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-            side: BorderSide(
-              color: borderColor.withValues(alpha: 0.55),
-              width: 1,
-            ),
-          ),
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(20),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 16, 16, 16),
-              // IntrinsicHeight, not just Row(crossAxisAlignment: stretch) —
-              // this Row sits in a ListView item, where incoming height is
-              // unbounded (it sizes to content). `stretch` alone needs a
-              // bounded height to stretch to and threw "BoxConstraints forces
-              // an infinite height" without it — a real crash caught live,
-              // not a hypothetical: it blanked the entire feed with no
-              // exception surfaced past logcat (Flutter's error boundary
-              // still painted the rest of the frame; there was just nothing
-              // valid left to paint for every card). IntrinsicHeight measures
-              // the tallest child first, giving the Row a real height to
-              // stretch the colored rail against.
-              child: IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(
-                      width: 4,
-                      margin: const EdgeInsets.only(right: 12),
-                      decoration: BoxDecoration(
-                        color: borderColor,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // The colored "hero" panel — badge tag + bookmark up top,
+            // title + salary overlaid at the bottom on a gradient dark
+            // enough for white text to stay legible over any panel color.
+            AspectRatio(
+              aspectRatio: 16 / 9,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [panelColor.withValues(alpha: 0.85), Color.lerp(panelColor, Colors.black, 0.55)!],
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(listing.title, style: text.titleLarge),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      listing.company,
-                                      style: text.bodyMedium,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              TrustBadgeChip(
-                                badge: assessment.trustBadge,
-                                compact: true,
-                              ),
-                              // Saved state gets its own color, not just a
-                              // filled-vs-outline icon swap — accent when saved,
-                              // muted when not, so the bookmark itself reads as
-                              // "on/off" at a glance.
-                              IconButton(
-                                icon: Icon(
-                                  isSaved
-                                      ? Icons.bookmark
-                                      : Icons.bookmark_border,
-                                ),
-                                color: isSaved
-                                    ? Theme.of(context).colorScheme.primary
-                                    : Theme.of(
-                                        context,
-                                      ).colorScheme.onSurfaceVariant,
-                                tooltip: isSaved
-                                    ? 'Remove from saved'
-                                    : 'Save for later',
-                                visualDensity: VisualDensity.compact,
-                                onPressed: uid == null
-                                    ? null
-                                    : () {
-                                        final repo = ref.read(
-                                          savedJobRepositoryProvider,
-                                        );
-                                        if (isSaved) {
-                                          repo.unsave(
-                                            uid: uid,
-                                            listingId: listing.id,
-                                          );
-                                        } else {
-                                          repo.save(
-                                            uid: uid,
-                                            listingId: listing.id,
-                                          );
-                                        }
-                                      },
-                              ),
-                            ],
+                          _PanelTag(
+                            label: listing.isRemote ? 'Remote' : 'On-site',
+                            icon: listing.isRemote ? Icons.wifi : Icons.apartment_outlined,
                           ),
-                          const SizedBox(height: 12),
-                          Wrap(
-                            spacing: 14,
-                            runSpacing: 6,
-                            children: [
-                              _MetaChip(
-                                icon: Icons.place_outlined,
-                                label: listing.location,
-                              ),
-                              if (listing.isRemote)
-                                const _MetaChip(
-                                  icon: Icons.wifi,
-                                  label: 'Remote',
-                                ),
-                              if (salaryLine != null)
-                                _MetaChip(
-                                  icon: Icons.payments_outlined,
-                                  label: salaryLine,
-                                ),
-                            ],
+                          const Spacer(),
+                          _PanelIconButton(
+                            icon: isSaved ? Icons.bookmark : Icons.bookmark_border,
+                            active: isSaved,
+                            tooltip: isSaved ? 'Remove from saved' : 'Save for later',
+                            onTap: uid == null
+                                ? null
+                                : () {
+                                    final repo = ref.read(savedJobRepositoryProvider);
+                                    if (isSaved) {
+                                      repo.unsave(uid: uid, listingId: listing.id);
+                                    } else {
+                                      repo.save(uid: uid, listingId: listing.id);
+                                    }
+                                  },
                           ),
-                          if (listing.requiredSkills.isNotEmpty) ...[
-                            const SizedBox(height: 12),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: [
-                                for (final skill in listing.requiredSkills.take(
-                                  5,
-                                ))
-                                  Chip(
-                                    label: Text(skill),
-                                    visualDensity: VisualDensity.compact,
-                                    materialTapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                              ],
-                            ),
-                          ],
                         ],
                       ),
-                    ),
-                  ],
+                      const Spacer(),
+                      Text(
+                        listing.title,
+                        style: text.titleLarge?.copyWith(color: Colors.white),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (salaryLine != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          salaryLine,
+                          style: text.titleMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w800),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        )
+
+            // Meta row: company identity, trust badge (this app's actual
+            // reason to exist — kept even though the reference has no
+            // equivalent), location, and freshness.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      CompanyAvatar(company: listing.company, size: 28),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(listing.company, style: text.titleSmall, overflow: TextOverflow.ellipsis),
+                      ),
+                      const SizedBox(width: 8),
+                      TrustBadgeChip(badge: assessment.trustBadge, compact: true),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 14,
+                    runSpacing: 6,
+                    children: [
+                      _MetaChip(icon: Icons.place_outlined, label: listing.location),
+                      _MetaChip(icon: Icons.schedule_outlined, label: _postedAgo),
+                    ],
+                  ),
+                  if (listing.requiredSkills.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final skill in listing.requiredSkills.take(4))
+                          Chip(
+                            label: Text(skill),
+                            visualDensity: VisualDensity.compact,
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    )
         .animate(delay: AppMotion.feedStagger * staggerIndex)
         .fadeIn(duration: AppMotion.standard, curve: AppMotion.settle)
-        .slideY(
-          begin: 0.08,
-          end: 0,
-          duration: AppMotion.standard,
-          curve: AppMotion.settle,
-        );
+        .slideY(begin: 0.08, end: 0, duration: AppMotion.standard, curve: AppMotion.settle);
+  }
+}
+
+class _PanelTag extends StatelessWidget {
+  const _PanelTag({required this.label, required this.icon});
+
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: Colors.black87),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: Theme.of(context)
+                .textTheme
+                .labelSmall
+                ?.copyWith(color: Colors.black87, fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PanelIconButton extends StatelessWidget {
+  const _PanelIconButton({required this.icon, required this.active, required this.tooltip, required this.onTap});
+
+  final IconData icon;
+  final bool active;
+  final String tooltip;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.white.withValues(alpha: 0.9),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(7),
+            child: Icon(icon, size: 17, color: active ? accent : Colors.black87),
+          ),
+        ),
+      ),
+    );
   }
 }
 

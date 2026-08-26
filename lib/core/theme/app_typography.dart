@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 
-/// Type scale for "Editorial Trust".
+/// Type scale for the "Ember" redesign — matches the user-supplied dark
+/// photo-card reference's bold, all-sans headline language (its "Let's
+/// Find Your Next Job" is a heavy grotesk, not a serif).
 ///
-/// Fraunces (serif) is reserved for the things that carry a judgment —
-/// match-score numerals, trust-badge headlines, section titles that read
-/// as a verdict. Manrope (grotesk) carries everything else: lists, labels,
-/// body copy, form fields. The pairing is what makes a score feel like a
-/// considered assessment rather than a UI widget spitting out a number.
+/// Fraunces (serif) is now reserved for ONLY the match-score numeral
+/// itself ([displayLarge]/[displayMedium]/[displaySmall]) — the one
+/// number in the app meant to read as a considered verdict rather than a
+/// UI label. Every headline/section-title role that used to carry Fraunces
+/// under "Editorial Trust" now uses Manrope at a heavier weight instead,
+/// matching the reference.
 abstract final class AppTypography {
   static const String display = 'Fraunces';
   static const String ui = 'Manrope';
@@ -39,26 +42,29 @@ abstract final class AppTypography {
         color: ink,
       ),
 
-      // Trust badge headline / screen section titles.
+      // Trust badge headline / screen section titles — bold Manrope, not
+      // Fraunces, per the reference's headline style (see class doc).
       headlineLarge: TextStyle(
-        fontFamily: display,
+        fontFamily: ui,
         fontSize: 28,
         height: 1.15,
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.5,
         color: ink,
       ),
       headlineMedium: TextStyle(
-        fontFamily: display,
+        fontFamily: ui,
         fontSize: 22,
         height: 1.2,
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.3,
         color: ink,
       ),
       headlineSmall: TextStyle(
-        fontFamily: display,
+        fontFamily: ui,
         fontSize: 18,
         height: 1.25,
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.w700,
         color: ink,
       ),
 

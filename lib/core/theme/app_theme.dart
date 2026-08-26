@@ -89,25 +89,32 @@ abstract final class AppTheme {
       ),
 
       // Flat, bordered cards — not the stock elevated-shadow list card.
+      // Radius bumped from 20→24 as part of the bolder, more confident
+      // card language borrowed from the reference redesign (both the
+      // light-dashboard and dark-photo-card directions use noticeably
+      // rounder cards than "Editorial Trust"'s original, more restrained
+      // 20px).
       cardTheme: CardThemeData(
         color: scheme.surface,
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(24),
           side: BorderSide(color: outline, width: 1),
         ),
       ),
 
+      // Pill-shaped, not just rounded-rect — matches the reference's bold
+      // "Apply Job" / "Apply for this Job" CTA language. Still flat
+      // (elevation 0), same principle as the cards: color and shape carry
+      // the weight, not a drop shadow.
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: scheme.primary,
           foregroundColor: scheme.onPrimary,
           disabledBackgroundColor: outline,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
+          shape: const StadiumBorder(),
           textStyle: textTheme.labelLarge,
           elevation: 0,
         ),
@@ -118,9 +125,7 @@ abstract final class AppTheme {
           foregroundColor: ink,
           side: BorderSide(color: outline, width: 1.2),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
+          shape: const StadiumBorder(),
           textStyle: textTheme.labelLarge,
         ),
       ),
@@ -137,15 +142,15 @@ abstract final class AppTheme {
         fillColor: scheme.surface,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(20),
           borderSide: BorderSide(color: outline),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(20),
           borderSide: BorderSide(color: outline),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(20),
           borderSide: BorderSide(color: scheme.primary, width: 1.5),
         ),
         hintStyle: textTheme.bodyMedium?.copyWith(color: inkMuted),
@@ -153,12 +158,14 @@ abstract final class AppTheme {
 
       dividerTheme: DividerThemeData(color: outline, thickness: 1, space: 1),
 
+      // Pill chips (StadiumBorder), not the original 10px rounded-rect —
+      // matches the reference's filter-chip and meta-tag language.
       chipTheme: ChipThemeData(
         backgroundColor: scheme.surfaceContainerHighest,
         side: BorderSide(color: outline),
         labelStyle: textTheme.labelMedium,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        shape: const StadiumBorder(),
       ),
 
       // Explicit, not left to Material defaults: SegmentedButton's default
@@ -186,6 +193,7 @@ abstract final class AppTheme {
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: scaffoldBg,
         indicatorColor: scheme.primary.withValues(alpha: 0.16),
+        indicatorShape: const StadiumBorder(),
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
             color: states.contains(WidgetState.selected) ? scheme.primary : inkMuted,

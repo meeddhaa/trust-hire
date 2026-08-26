@@ -5,6 +5,7 @@ import '../../../core/providers/repository_providers.dart';
 import '../../../core/router/main_shell.dart';
 import '../../../core/providers/session_providers.dart';
 import '../../../data/models/saved_job.dart';
+import '../../../shared/widgets/company_avatar.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../listing_detail/providers/listing_detail_providers.dart';
 import '../providers/saved_jobs_providers.dart';
@@ -57,6 +58,9 @@ class _SavedJobTile extends ConsumerWidget {
 
     return Card(
       child: ListTile(
+        leading: listingAsync.value?.company != null
+            ? CompanyAvatar(company: listingAsync.value!.company, size: 40)
+            : null,
         title: listingAsync.when(
           data: (listing) => Text(listing?.title ?? 'Listing no longer available'),
           loading: () => const Text('Loading…'),
