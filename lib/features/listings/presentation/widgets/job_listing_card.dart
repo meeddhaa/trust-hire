@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/providers/repository_providers.dart';
+import '../../../../core/providers/session_providers.dart';
 import '../../../../core/theme/app_motion.dart';
 import '../../../../data/models/job_listing.dart';
 import '../../../../data/services/scam_rule_engine.dart';
 import '../../../../shared/widgets/trust_badge_chip.dart';
+import '../../../saved_jobs/providers/saved_jobs_providers.dart';
 
 /// A listing in the feed. Shows only the trust badge, computed instantly
 /// and client-side by [ScamRuleEngine] — not a match score, which needs a
@@ -14,7 +18,7 @@ import '../../../../shared/widgets/trust_badge_chip.dart';
 /// scoring: it only gets computed once a listing is actually opened (see
 /// `listing_detail`), where the real number becomes the screen's
 /// centerpiece.
-class JobListingCard extends StatelessWidget {
+class JobListingCard extends ConsumerWidget {
   const JobListingCard({super.key, required this.listing, required this.onTap, this.staggerIndex = 0});
 
   final JobListing listing;
@@ -37,10 +41,12 @@ class JobListingCard extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final text = Theme.of(context).textTheme;
     final assessment = ScamRuleEngine.assess(listing);
     final salaryLine = _salaryLine;
+    final isSaved = ref.watch(isJobSavedProvider(listing.id)).valueOrNull ?? false;
+    final uid = ref.read(currentUidProvider);
 
     return Card(
       child: InkWell(
@@ -64,8 +70,23 @@ class JobListingCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   TrustBadgeChip(badge: assessment.trustBadge, compact: true),
+                  IconButton(
+                    icon: Icon(isSaved ? Icons.bookmark : Icons.bookmark_border),
+                    tooltip: isSaved ? 'Remove from saved' : 'Save for later',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: uid == null
+                        ? null
+                        : () {
+                            final repo = ref.read(savedJobRepositoryProvider);
+                            if (isSaved) {
+                              repo.unsave(uid: uid, listingId: listing.id);
+                            } else {
+                              repo.save(uid: uid, listingId: listing.id);
+                            }
+                          },
+                  ),
                 ],
               ),
               const SizedBox(height: 12),

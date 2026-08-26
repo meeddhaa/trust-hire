@@ -23,8 +23,8 @@ class ResumeService {
     try {
       await _storage.ref(path).putData(bytes, SettableMetadata(contentType: 'application/pdf'));
       return path;
-    } on FirebaseException {
-      throw const NetworkFailure("Couldn't upload your resume — check your internet and try again.");
+    } on FirebaseException catch (e) {
+      throw NetworkFailure(_describe(e, action: 'upload'));
     }
   }
 
@@ -35,7 +35,7 @@ class ResumeService {
       // Deleting a resume that's already gone (e.g. a stale doc reference)
       // isn't a real failure — nothing left to remove.
       if (e.code != 'object-not-found') {
-        throw const NetworkFailure("Couldn't remove your resume — check your internet and try again.");
+        throw NetworkFailure(_describe(e, action: 'remove'));
       }
     }
   }
@@ -46,8 +46,22 @@ class ResumeService {
   Future<String> getDownloadUrl(String uid) async {
     try {
       return await _storage.ref(_pathFor(uid)).getDownloadURL();
-    } on FirebaseException {
-      throw const NetworkFailure("Couldn't load your resume — check your internet and try again.");
+    } on FirebaseException catch (e) {
+      throw NetworkFailure(_describe(e, action: 'load'));
     }
+  }
+
+  /// Blames the actual cause instead of defaulting to "check your
+  /// internet" — that message was actively misleading the one time this
+  /// was tested against a real device: the failure was Storage not being
+  /// enabled on the Firebase project yet (`object-not-found` /
+  /// `unknown`/bucket-not-found style codes), not connectivity. There's
+  /// no reliable, documented FlutterFire code specifically for "bucket
+  /// doesn't exist," so this surfaces the raw code rather than guessing
+  /// at a friendlier label that might just as easily be wrong.
+  String _describe(FirebaseException e, {required String action}) {
+    return "Couldn't $action your resume (${e.code}). "
+        'If this keeps happening, ask whoever set up the project to confirm '
+        'Firebase Storage is enabled — check your internet only if that checks out.';
   }
 }

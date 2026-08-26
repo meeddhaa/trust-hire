@@ -74,4 +74,16 @@ class ProfileRepository {
       throw const NetworkFailure("Couldn't save your resume info — check your internet and try again.");
     }
   }
+
+  /// Used by account deletion — removes the `users/{uid}` doc itself.
+  /// Called after applications/saved jobs/resume are already cleaned up
+  /// (see `AccountController.deleteAccount`), and before the Auth account
+  /// is deleted (needs to still be signed in to pass `isOwner(uid)`).
+  Future<void> deleteProfile(String uid) async {
+    try {
+      await _doc(uid).delete();
+    } on FirebaseException {
+      throw const NetworkFailure("Couldn't delete your profile — check your internet and try again.");
+    }
+  }
 }

@@ -2,9 +2,11 @@ import { AuthError, extractBearerToken, verifyFirebaseIdToken } from './auth';
 import { getDocument, setDocument } from './firestoreClient';
 import { callGeminiForJson, GeminiError } from './gemini';
 import {
+  buildJobCoachPrompt,
   buildMatchPrompt,
   buildResumeTailorPrompt,
   buildScamPrompt,
+  JOB_COACH_RESPONSE_SCHEMA,
   MATCH_RESPONSE_SCHEMA,
   RESUME_TAILOR_RESPONSE_SCHEMA,
   SCAM_RESPONSE_SCHEMA,
@@ -12,7 +14,14 @@ import {
 import { checkAndConsumeRateLimit } from './rateLimiter';
 import { bandTrustBadge, computeRuleScore, computeScamRuleFlags } from './scamRules';
 import { getStorageObjectBase64 } from './storageClient';
-import type { JobListingDoc, MatchGeminiResult, ResumeTailorGeminiResult, ScamGeminiResult, UserProfileDoc } from './types';
+import type {
+  JobCoachGeminiResult,
+  JobListingDoc,
+  MatchGeminiResult,
+  ResumeTailorGeminiResult,
+  ScamGeminiResult,
+  UserProfileDoc,
+} from './types';
 
 /**
  * Cloudflare Worker: the Gemini relay named in the brief. Holds the API
@@ -169,6 +178,53 @@ async function handleResumeTailor(request: Request, env: Env, uid: string): Prom
   return json({ listingId, ...result });
 }
 
+const JOB_COACH_INTENTS = new Set([
+  'improve_resume',
+  'analyze_job',
+  'interview_prep',
+  'skill_gaps',
+  'career_guidance',
+  'custom',
+]);
+
+async function handleJobCoach(request: Request, env: Env, uid: string): Promise<Response> {
+  const body = await request
+    .json<{ intent?: unknown; question?: unknown; listingId?: unknown }>()
+    .catch(() => null);
+  const intent = body?.intent;
+  if (typeof intent !== 'string' || !JOB_COACH_INTENTS.has(intent)) {
+    throw new TypeError(`Request body must include a valid "intent" (one of: ${[...JOB_COACH_INTENTS].join(', ')})`);
+  }
+  const question = typeof body?.question === 'string' ? body.question : undefined;
+  const listingId = typeof body?.listingId === 'string' ? body.listingId : undefined;
+
+  const profile = await getDocument(env, `users/${uid}`);
+  const listing = listingId ? await getDocument(env, `listings/${listingId}`) : null;
+  const resumeBase64 = await getStorageObjectBase64(env, `resumes/${uid}/resume.pdf`);
+
+  const rateLimit = await checkAndConsumeRateLimit(env, uid);
+  if (!rateLimit.allowed) {
+    return errorResponse(429, `Daily AI request limit (${rateLimit.limit}) reached — try again tomorrow`);
+  }
+
+  const { systemInstruction, userPrompt } = buildJobCoachPrompt({
+    intent,
+    question,
+    profile: (profile as unknown as UserProfileDoc) ?? undefined,
+    listing: (listing as unknown as JobListingDoc) ?? undefined,
+    hasResume: resumeBase64 !== null,
+  });
+  const result = await callGeminiForJson<JobCoachGeminiResult>(
+    env,
+    systemInstruction,
+    userPrompt,
+    JOB_COACH_RESPONSE_SCHEMA,
+    resumeBase64 ? [{ mimeType: 'application/pdf', base64Data: resumeBase64 }] : [],
+  );
+
+  return json(result);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -187,6 +243,7 @@ export default {
       if (url.pathname === '/v1/match') return await handleMatch(request, env, uid);
       if (url.pathname === '/v1/scam-assessment') return await handleScamAssessment(request, env, uid);
       if (url.pathname === '/v1/resume-tailor') return await handleResumeTailor(request, env, uid);
+      if (url.pathname === '/v1/job-coach') return await handleJobCoach(request, env, uid);
       return errorResponse(404, 'Unknown endpoint');
     } catch (err) {
       if (err instanceof AuthError) return errorResponse(401, err.message);

@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../core/providers/session_providers.dart';
+import '../../../core/router/main_shell.dart';
 import '../../../data/models/subscription.dart';
 
 /// View profile after onboarding — bio, skills, experience. Account-level
-/// actions (sign-out, subscription, appearance, resume) live in Settings
-/// instead (`/settings`), reached via the gear icon here — kept separate
-/// so this screen stays "who you are" and Settings stays "how the app
-/// behaves for you." Editing beyond what onboarding collects is a natural
-/// follow-up once this and the paywall/subscription flow are both stable.
+/// actions (sign-out, subscription, appearance, resume) live in the
+/// account drawer instead (see `app_drawer.dart`) — kept separate so this
+/// screen stays "who you are" and the drawer stays "manage my account."
+/// Editing beyond what onboarding collects is a natural follow-up once
+/// this and the paywall/subscription flow are both stable.
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
@@ -20,16 +20,7 @@ class ProfileScreen extends ConsumerWidget {
     final subscriptionAsync = ref.watch(currentSubscriptionProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profile'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: 'Settings',
-            onPressed: () => context.push('/settings'),
-          ),
-        ],
-      ),
+      appBar: AppBar(leading: buildDrawerButton(context), title: const Text('Profile')),
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(child: Text(error.toString())),

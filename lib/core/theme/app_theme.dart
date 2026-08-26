@@ -178,6 +178,25 @@ abstract final class AppTheme {
           side: BorderSide(color: outline),
         ),
       ),
+
+      // Same reasoning as segmentedButtonTheme above: NavigationBar's
+      // default selected-tab indicator is `colorScheme.secondaryContainer`
+      // — without this, the bottom nav's active tab would render in the
+      // risk-verdict teal too.
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: scaffoldBg,
+        indicatorColor: scheme.primary.withValues(alpha: 0.16),
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(
+            color: states.contains(WidgetState.selected) ? scheme.primary : inkMuted,
+          ),
+        ),
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => textTheme.labelSmall?.copyWith(
+            color: states.contains(WidgetState.selected) ? scheme.primary : inkMuted,
+          ),
+        ),
+      ),
     );
   }
 }

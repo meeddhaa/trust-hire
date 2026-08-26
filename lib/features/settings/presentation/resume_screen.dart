@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/errors/failure.dart';
 import '../../../core/providers/session_providers.dart';
+import '../../../data/resume_templates.dart';
 import '../../../shared/widgets/expandable_section.dart';
 import '../providers/resume_providers.dart';
 
@@ -107,67 +108,63 @@ class ResumeScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 32),
 
-          ExpandableSection(
-            title: "Don't have a resume yet? Use this template",
-            child: const _ResumeTemplate(),
+          Text("Don't have a resume yet?", style: text.titleMedium),
+          const SizedBox(height: 4),
+          Text(
+            'Five ATS-friendly structures to write your own from — not live editing, '
+            'just a section-by-section guide for each.',
+            style: text.bodyMedium,
           ),
+          const SizedBox(height: 12),
+          for (final template in resumeTemplates)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _ResumeTemplateCard(template: template),
+            ),
         ],
       ),
     );
   }
 }
 
-class _ResumeTemplate extends StatelessWidget {
-  const _ResumeTemplate();
+class _ResumeTemplateCard extends StatelessWidget {
+  const _ResumeTemplateCard({required this.template});
 
-  static const _sections = [
-    (
-      'Contact info',
-      'Full name, phone, email, city — and a LinkedIn/portfolio link if you have one.',
-    ),
-    (
-      'Summary (2–3 lines)',
-      'What you do, your strongest skill area, and what kind of role you want. '
-          'e.g. "Backend developer with 2 years building Flutter/Firebase apps, looking for '
-          'roles focused on mobile app development."',
-    ),
-    (
-      'Skills',
-      'A short list, most relevant first — match the language listings actually use '
-          '(e.g. "Flutter" and "Firebase", not just "mobile development").',
-    ),
-    (
-      'Experience',
-      'For each role: title, company, dates, then 2–4 bullet points starting with an '
-          'action verb and, where possible, a number — "Built a Flutter app used by 500+ '
-          'daily users" beats "Worked on a mobile app."',
-    ),
-    (
-      'Education',
-      'Degree, institution, graduation year. Add relevant coursework only if you have '
-          'little work experience yet.',
-    ),
-  ];
+  final ResumeTemplate template;
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final (title, body) in _sections)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: text.labelLarge),
-                const SizedBox(height: 3),
-                Text(body, style: text.bodyMedium),
-              ],
-            ),
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: ExpandableSection(
+          title: template.name,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(template.description, style: text.bodyMedium),
+              const SizedBox(height: 4),
+              Text('Best for: ${template.bestFor}', style: text.bodySmall?.copyWith(color: muted)),
+              const SizedBox(height: 14),
+              for (final (title, guidance) in template.sections)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: text.labelLarge),
+                      const SizedBox(height: 3),
+                      Text(guidance, style: text.bodyMedium),
+                    ],
+                  ),
+                ),
+            ],
           ),
-      ],
+        ),
+      ),
     );
   }
 }

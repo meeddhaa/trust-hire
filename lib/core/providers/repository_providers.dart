@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/repositories/application_repository.dart';
 import '../../data/repositories/listings_repository.dart';
 import '../../data/repositories/match_repository.dart';
 import '../../data/repositories/profile_repository.dart';
+import '../../data/repositories/saved_job_repository.dart';
 import '../../data/repositories/scam_repository.dart';
 import '../../data/repositories/subscription_repository.dart';
 import '../../data/services/firebase_auth_service.dart';
@@ -28,3 +30,7 @@ final subscriptionRepositoryProvider = Provider<SubscriptionRepository>(
 );
 
 final resumeServiceProvider = Provider<ResumeService>((ref) => ResumeService());
+
+final applicationRepositoryProvider = Provider<ApplicationRepository>((ref) => ApplicationRepository());
+
+final savedJobRepositoryProvider = Provider<SavedJobRepository>((ref) => SavedJobRepository());

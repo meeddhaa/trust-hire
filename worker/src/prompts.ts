@@ -40,6 +40,15 @@ export const RESUME_TAILOR_RESPONSE_SCHEMA: GeminiJsonSchema = {
   required: ['tailoredSummary', 'emphasize', 'addKeywords', 'suggestions'],
 };
 
+export const JOB_COACH_RESPONSE_SCHEMA: GeminiJsonSchema = {
+  type: 'OBJECT',
+  properties: {
+    answer: { type: 'STRING' },
+    followUpSuggestions: { type: 'ARRAY', items: { type: 'STRING' } },
+  },
+  required: ['answer', 'followUpSuggestions'],
+};
+
 const MATCH_SYSTEM_INSTRUCTION = `You are the explainable job-matching engine inside TrustHire, an app \
 helping job seekers in Bangladesh evaluate listings. Given a candidate's \
 profile and a job listing, you must:
@@ -105,6 +114,62 @@ export function buildResumeTailorPrompt(listing: JobListingDoc) {
     },
   });
   return { systemInstruction: RESUME_TAILOR_SYSTEM_INSTRUCTION, userPrompt };
+}
+
+const JOB_COACH_SYSTEM_INSTRUCTION = `You are the "Job Coach" inside TrustHire, a career-focused assistant for \
+job seekers in Bangladesh. You ONLY help with job search and career topics: \
+resume improvement, job-description analysis, match assessment, skill \
+gaps, application strategy, interview preparation, and career planning. \
+If asked for anything outside that scope (general trivia, creative \
+writing, unrelated topics), politely decline in "answer" and redirect to \
+what you can help with — never answer the off-topic request.
+You are given the user's intent, and whatever context is available: \
+their profile (skills, experience), a specific job listing, and/or their \
+resume (as an attached document). Use only what's actually provided — do \
+not invent experience, requirements, or listing details that weren't \
+given. If key context is missing for a good answer (e.g. asked to \
+analyze a job but no listing was given), say so plainly in "answer" \
+rather than guessing.
+Write "answer" as a direct, specific, plain-language response — concrete \
+advice grounded in the given context, not generic career-advice filler. \
+Write "followUpSuggestions": 2-4 short follow-up questions or actions the \
+user could take next, relevant to what was just discussed. Respond with \
+JSON only, matching the schema exactly, no text outside the JSON.`;
+
+export function buildJobCoachPrompt({
+  intent,
+  question,
+  profile,
+  listing,
+  hasResume,
+}: {
+  intent: string;
+  question?: string;
+  profile?: UserProfileDoc;
+  listing?: JobListingDoc;
+  hasResume: boolean;
+}) {
+  const userPrompt = JSON.stringify({
+    intent,
+    question: question ?? null,
+    candidate: profile
+      ? {
+          skills: profile.skills,
+          yearsOfExperience: profile.yearsOfExperience ?? null,
+          educationLevel: profile.educationLevel ?? null,
+        }
+      : null,
+    listing: listing
+      ? {
+          title: listing.title,
+          company: listing.company,
+          requiredSkills: listing.requiredSkills,
+          description: listing.description,
+        }
+      : null,
+    resumeAttached: hasResume,
+  });
+  return { systemInstruction: JOB_COACH_SYSTEM_INSTRUCTION, userPrompt };
 }
 
 export function buildMatchPrompt(profile: UserProfileDoc, listing: JobListingDoc) {

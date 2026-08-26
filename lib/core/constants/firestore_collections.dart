@@ -7,4 +7,9 @@ abstract final class FirestoreCollections {
   static const matchResults = 'matchResults';
   static const scamAssessments = 'scamAssessments';
   static const subscriptions = 'subscriptions';
+  static const applications = 'applications';
+  static const savedJobs = 'savedJobs';
+
+  /// Subcollection under `users/{uid}` — see `Resume` model.
+  static const resumes = 'resumes';
 }

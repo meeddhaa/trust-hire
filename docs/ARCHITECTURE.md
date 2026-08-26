@@ -317,6 +317,110 @@ see that directory's README) because JSearch's free tier is a hard 200
 requests/month — fetching and writing to Firestore are separate so
 iterating on the Firestore mapping never costs API quota.
 
+## Decision: platform expansion beyond the original brief
+
+After using the app on-device, real feedback pushed this well past the
+original bdapps brief's scope: a full navigation restructure, application
+tracking, saved jobs, multi-touchpoint AI reframed as one "Job Coach,"
+account deletion, and ATS resume templates. **Explicitly sequenced ahead
+of the brief's still-missing hard requirements** (web landing page, bdapps
+integration) — a deliberate, confirmed choice, not scope creep that
+snuck in. Flagged clearly before building any of it; logged here so the
+tradeoff is on the record, not just in chat history.
+
+### Navigation: drawer + bottom-nav shell
+
+Previously: icons bolted onto individual app bars (a person icon on the
+feed, a gear icon on Profile) as each screen was built, with no single
+navigational structure. Restructured into two clearly separated layers,
+per explicit feedback that this had gotten messy:
+
+- **Primary product surface** — Jobs / Applications / Saved / Job Coach /
+  Profile as bottom-nav tabs (`core/router/main_shell.dart`), built on
+  go_router's `StatefulShellRoute.indexedStack` so each tab keeps its own
+  navigation stack (pushing a listing detail from Jobs doesn't disturb
+  Applications' scroll position).
+- **Account management** — Resume, Settings, Subscription, Sign out, in a
+  drawer (`core/router/app_drawer.dart`) reached from a hamburger icon on
+  every tab. Deliberately doesn't repeat Profile (already its own tab) —
+  the same destination reachable two confusing ways was the exact problem
+  being fixed.
+
+Real bug this surfaced, fixed the same way as the earlier
+`segmentedButtonTheme` fix: `NavigationBar`'s default selected-tab
+indicator also reads `colorScheme.secondaryContainer` — without an
+explicit `navigationBarTheme`, the active bottom-nav tab rendered in the
+same risk-verdict teal a "Verified-leaning" badge uses. This class of bug
+(a Material default silently pulling from `secondary`, which we
+deliberately reserve for verdicts) is worth checking for in any new
+selection-style widget added later.
+
+### Applications, Saved Jobs
+
+Two new client-owned collections (`applications`, `savedJobs` —
+`ApplicationRepository`/`SavedJobRepository`), unlike
+`matchResults`/`scamAssessments`: no "forged verdict" risk in a user
+tracking their own self-reported status, so ordinary owner-scoped
+Firestore rules apply, no Worker involved. `Application.status` is
+purely self-reported (interested/applied/interviewing/offer/rejected) —
+nothing verifies it against bdapps or email. Composite indexes
+(`userId` + `updatedAt`/`savedAt`) added to `firestore.indexes.json` for
+the list queries.
+
+### Job Coach: one AI identity, not three
+
+The app already had three Gemini touchpoints (match reasoning, scam
+reasoning, resume tailoring) but never branded any of them "Gemini" in
+the UI — there was nothing to remove there. What was missing was a
+*coherent* identity tying them together. "Job Coach" (`features/job_coach/`)
+is that: a single Worker endpoint (`/v1/job-coach`) handling five fixed
+intents plus free-text questions, with a system instruction that
+explicitly refuses anything outside job-search/career topics. Reachable
+as its own bottom-nav tab, and contextually from a listing ("Get Job
+Coach advice" navigates there with `?listingId=` so the same screen picks
+up that listing's context) — one underlying system, not a separate
+assistant per entry point, per the explicit design requirement.
+
+**Deliberately not built**: persisted multi-turn conversation memory or
+streaming responses. Each question is a single request/response (like
+resume-tailoring), framed as chat-like UI. True multi-turn memory would
+need conversation-state storage and a materially different Worker
+architecture — scoped out for now rather than half-built.
+
+### Resume: multi-template guide, not yet multi-version
+
+Built: 5 original ATS-friendly template *guides* (`data/resume_templates.dart`)
+— structurally distinct (Classic ATS, Modern Professional, Technical,
+Entry-Level, Executive/Minimal), not five cosmetic variants of one layout,
+and not copied from any specific named template (those are other
+designers' copyrighted layouts) — generic, well-documented ATS
+conventions instead (single-column, standard headers, no
+tables/graphics).
+
+**Deliberately deferred**: true multiple saved resume versions per user
+(e.g. "AI/LLM Resume" vs. "Product Resume", each independently
+upload/duplicate/download-able) and an in-app resume editor/builder. The
+current model is still one resume per user
+(`resumes/{uid}/resume.pdf`) — upgrading to a `users/{uid}/resumes/{id}`
+subcollection (already reserved in `firestore.rules` and
+`FirestoreCollections.resumes`) is a real, bounded follow-up, not
+attempted in this pass alongside everything else.
+
+### Account deletion and profile visibility
+
+`AccountController` deletes everything the client owns before deleting
+the Auth account itself (applications, saved jobs, resume file, profile
+doc) — **known gap, not swept under the rug**: `matchResults`/
+`scamAssessments` are server-write-only, so the client can't purge those;
+they hold no identifying data beyond a now-deleted `uid` string, but a
+fully complete purge needs a Worker admin endpoint, not built here.
+
+Profile visibility (Public/Private) is a stored preference with nothing
+behind it yet — no employer-facing view of any profile exists in the app,
+so there's nothing to actually enforce. Built anyway, per an explicit
+ask, with the Settings screen's own copy saying so plainly rather than
+implying it already controls something.
+
 ## Status
 
 - [x] Project scaffolded (`flutter create`, Android target)

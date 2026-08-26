@@ -1,6 +1,7 @@
 import '../../core/constants/worker_config.dart';
 import '../../core/errors/failure.dart';
 import '../../core/network/api_client.dart';
+import '../models/job_coach_result.dart';
 import '../models/match_result.dart';
 import '../models/resume_tailor_result.dart';
 import '../models/scam_assessment.dart';
@@ -60,5 +61,23 @@ class WorkerApiService {
       body: {'listingId': listingId},
     );
     return ResumeTailorResult.fromJson(response);
+  }
+
+  /// `listingId` and `question` are both optional — the Worker uses
+  /// whatever context is available (profile always, listing/resume if
+  /// present) rather than requiring a fixed shape per intent.
+  Future<JobCoachResult> askJobCoach({required String intent, String? listingId, String? question}) async {
+    final token = await _requireIdToken();
+    final response = await _apiClient.postJson(
+      WorkerConfig.baseUrl,
+      WorkerConfig.jobCoachPath,
+      bearerToken: token,
+      body: {
+        'intent': intent,
+        if (listingId != null) 'listingId': listingId,
+        if (question != null) 'question': question,
+      },
+    );
+    return JobCoachResult.fromJson(response);
   }
 }

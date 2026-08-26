@@ -24,6 +24,30 @@ service cloud.firestore {
     // Each user can read/write only their own document.
     match /users/{uid} {
       allow read, write: if isOwner(uid);
+
+      // --- Resumes: multiple named versions per user (e.g. "AI/LLM
+      // Resume", "General Resume") — each with its own Storage file.
+      // Owner-only, same as the parent doc.
+      match /resumes/{resumeId} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+
+    // --- Applications: user's own tracked status per listing (interested/
+    // applied/interviewing/offer/rejected) — self-reported, not verified by
+    // anything, so client-owned is fine (unlike matchResults/scamAssessments,
+    // there's no "forging a verdict" risk here). `request.resource` is null
+    // on delete, so create is checked separately from update/delete (which
+    // check the *existing* doc's owner instead).
+    match /applications/{applicationId} {
+      allow read, update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+    }
+
+    // --- Saved jobs: user's own bookmarks ---
+    match /savedJobs/{savedJobId} {
+      allow read, update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
     }
 
     // --- Job listings: curated feed, seeded/managed server-side ---

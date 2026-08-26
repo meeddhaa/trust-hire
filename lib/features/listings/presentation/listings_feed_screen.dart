@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/router/main_shell.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../providers/listings_providers.dart';
 import 'widgets/job_listing_card.dart';
@@ -14,14 +15,8 @@ class ListingsFeedScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        leading: buildDrawerButton(context),
         title: const Text('TrustHire'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.person_outline),
-            tooltip: 'Profile',
-            onPressed: () => context.push('/profile'),
-          ),
-        ],
       ),
       body: listingsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),

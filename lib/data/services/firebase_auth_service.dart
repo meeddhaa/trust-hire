@@ -64,6 +64,29 @@ class FirebaseAuthService {
     await Future.wait([_auth.signOut(), _googleSignIn.signOut()]);
   }
 
+  /// Deletes the Firebase Auth account itself. Callers should delete
+  /// owned Firestore/Storage data *before* calling this (see
+  /// `AccountController.deleteAccount`) — once signed out there's no
+  /// user to authorize those deletes with.
+  ///
+  /// Firebase requires a "recent" sign-in for this; if the session is
+  /// older than a few minutes this throws `requires-recent-login`, which
+  /// is surfaced as a specific, actionable message rather than a generic
+  /// re-auth flow (password re-entry / re-triggering Google sign-in) —
+  /// deferred as a fast-follow rather than built now.
+  Future<void> deleteAccount() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    try {
+      await user.delete();
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'requires-recent-login') {
+        throw const AuthFailure('Please sign out and sign back in, then try deleting your account again.');
+      }
+      throw AuthFailure(_messageFor(e));
+    }
+  }
+
   /// Translates the common Firebase Auth error codes into copy a user can
   /// act on. Falls back to Firebase's own message for anything less common
   /// rather than guessing at every possible code.

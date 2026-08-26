@@ -62,3 +62,10 @@ export interface ResumeTailorGeminiResult {
   addKeywords: string[];
   suggestions: string[];
 }
+
+/** Gemini's structured response for a Job Coach call. Like resume-tailoring,
+ * not cached — conversational/contextual, always fresh. */
+export interface JobCoachGeminiResult {
+  answer: string;
+  followUpSuggestions: string[];
+}

@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/errors/failure.dart';
+import '../../../core/providers/repository_providers.dart';
 import '../../../core/providers/session_providers.dart';
 import '../../../core/theme/risk_colors.dart';
+import '../../../data/models/application.dart';
 import '../../../data/models/job_listing.dart';
 import '../../../data/models/match_result.dart';
 import '../../../data/models/resume_tailor_result.dart';
@@ -11,6 +13,7 @@ import '../../../data/models/scam_assessment.dart';
 import '../../../shared/widgets/expandable_section.dart';
 import '../../../shared/widgets/match_score_dial.dart';
 import '../../../shared/widgets/trust_badge_chip.dart';
+import '../../applications/providers/applications_providers.dart';
 import '../providers/listing_detail_providers.dart';
 import '../providers/resume_tailor_providers.dart';
 import 'source_webview_screen.dart';
@@ -74,7 +77,9 @@ class _ListingDetailBody extends ConsumerWidget {
             '${listing.location}${listing.isRemote ? ' · Remote' : ''}',
             style: text.bodyMedium,
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
+          _ApplicationStatusRow(listingId: listing.id),
+          const SizedBox(height: 20),
 
           _MatchSection(listing: listing, isPaid: isPaid),
           const SizedBox(height: 20),
@@ -119,8 +124,63 @@ class _ListingDetailBody extends ConsumerWidget {
             icon: const Icon(Icons.open_in_new_rounded),
             label: const Text('View original posting'),
           ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () => context.go('/job-coach?listingId=${listing.id}'),
+            icon: const Icon(Icons.school_outlined),
+            label: const Text('Get Job Coach advice'),
+          ),
         ],
       ),
+    );
+  }
+}
+
+class _ApplicationStatusRow extends ConsumerWidget {
+  const _ApplicationStatusRow({required this.listingId});
+
+  final String listingId;
+
+  static const _labels = {
+    ApplicationStatus.interested: 'Interested',
+    ApplicationStatus.applied: 'Applied',
+    ApplicationStatus.interviewing: 'Interviewing',
+    ApplicationStatus.offer: 'Offer',
+    ApplicationStatus.rejected: 'Rejected',
+  };
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final text = Theme.of(context).textTheme;
+    final application = ref.watch(applicationForListingProvider(listingId)).valueOrNull;
+    final uid = ref.read(currentUidProvider);
+
+    return Row(
+      children: [
+        Text('Track: ', style: text.labelMedium),
+        const SizedBox(width: 4),
+        Expanded(
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<ApplicationStatus?>(
+              isExpanded: true,
+              value: application?.status,
+              hint: const Text('Not tracked'),
+              items: [
+                for (final status in ApplicationStatus.values)
+                  DropdownMenuItem(value: status, child: Text(_labels[status]!)),
+              ],
+              onChanged: uid == null
+                  ? null
+                  : (status) {
+                      if (status == null) return;
+                      ref
+                          .read(applicationRepositoryProvider)
+                          .setStatus(uid: uid, listingId: listingId, status: status);
+                    },
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
