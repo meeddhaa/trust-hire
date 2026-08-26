@@ -18,7 +18,7 @@ class UserProfile extends Equatable {
     this.skills = const [],
     this.yearsOfExperience,
     this.educationLevel,
-    this.resumeStoragePath,
+    this.resumeBase64,
     this.onboardingComplete = false,
     required this.createdAt,
     required this.updatedAt,
@@ -43,14 +43,14 @@ class UserProfile extends Equatable {
   final int? yearsOfExperience;
   final String? educationLevel;
 
-  /// Firebase Storage path (not a download URL — those expire) to an
-  /// uploaded CV, e.g. `resumes/{uid}/cv.pdf`. Currently always null and
-  /// unused: Storage requires the Blaze plan (billing card) to enable at
-  /// all, so onboarding collects `skills` as typed input instead — see
-  /// "Decision: no Firebase Storage" in docs/ARCHITECTURE.md. Left in the
-  /// model, nullable, so re-enabling upload later is wiring, not a schema
-  /// migration.
-  final String? resumeStoragePath;
+  /// The uploaded resume PDF, base64-encoded, stored directly on this doc
+  /// rather than a separate file store — see "Decision: resume storage,
+  /// twice reconsidered" in docs/ARCHITECTURE.md: Firebase Storage and
+  /// Cloudflare R2 both require a billing card on file even at $0 actual
+  /// cost, which wasn't available, so the resume lives here instead.
+  /// Keeps the whole doc under Firestore's 1MiB cap — see the upload
+  /// size check in `resume_screen.dart`.
+  final String? resumeBase64;
 
   /// Gates the onboarding → feed redirect in the router. False until the
   /// user has entered at least skills once.
@@ -82,7 +82,7 @@ class UserProfile extends Equatable {
       skills: List<String>.from(map['skills'] as List? ?? const []),
       yearsOfExperience: map['yearsOfExperience'] as int?,
       educationLevel: map['educationLevel'] as String?,
-      resumeStoragePath: map['resumeStoragePath'] as String?,
+      resumeBase64: map['resumeBase64'] as String?,
       onboardingComplete: map['onboardingComplete'] as bool? ?? false,
       createdAt: dateTimeFromValue(map['createdAt']),
       updatedAt: dateTimeFromValue(map['updatedAt']),
@@ -97,7 +97,7 @@ class UserProfile extends Equatable {
       'skills': skills,
       'yearsOfExperience': yearsOfExperience,
       'educationLevel': educationLevel,
-      'resumeStoragePath': resumeStoragePath,
+      'resumeBase64': resumeBase64,
       'onboardingComplete': onboardingComplete,
       'createdAt': timestampFromDateTime(createdAt),
       'updatedAt': timestampFromDateTime(updatedAt),
@@ -110,7 +110,7 @@ class UserProfile extends Equatable {
     List<String>? skills,
     int? yearsOfExperience,
     String? educationLevel,
-    String? resumeStoragePath,
+    String? resumeBase64,
     bool? onboardingComplete,
     DateTime? updatedAt,
   }) {
@@ -122,7 +122,7 @@ class UserProfile extends Equatable {
       skills: skills ?? this.skills,
       yearsOfExperience: yearsOfExperience ?? this.yearsOfExperience,
       educationLevel: educationLevel ?? this.educationLevel,
-      resumeStoragePath: resumeStoragePath ?? this.resumeStoragePath,
+      resumeBase64: resumeBase64 ?? this.resumeBase64,
       onboardingComplete: onboardingComplete ?? this.onboardingComplete,
       createdAt: createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
@@ -138,7 +138,7 @@ class UserProfile extends Equatable {
         skills,
         yearsOfExperience,
         educationLevel,
-        resumeStoragePath,
+        resumeBase64,
         onboardingComplete,
         createdAt,
         updatedAt,

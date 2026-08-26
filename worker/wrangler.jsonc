@@ -10,10 +10,6 @@
   // — never here, so they never land in git.
   "vars": {
     "FIREBASE_PROJECT_ID": "trusthire-bdapps",
-    // Matches firebase_options.dart's storageBucket. Read-only fetches for
-    // resume-tailoring (storageClient.ts) go straight to this bucket via
-    // the GCS JSON API, not through the Firebase Storage SDK.
-    "FIREBASE_STORAGE_BUCKET": "trusthire-bdapps.firebasestorage.app",
     // gemini-2.5-flash is listed by ListModels but rejects generateContent
     // for this project with "no longer available to new users" (confirmed
     // live, 2026-08-25) — Google's own error names gemini-3.6-flash as the

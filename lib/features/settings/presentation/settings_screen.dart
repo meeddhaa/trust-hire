@@ -3,12 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/errors/failure.dart';
 import '../../../core/providers/theme_mode_provider.dart';
 import '../providers/account_providers.dart';
-import '../providers/profile_visibility_provider.dart';
 
-/// "How the app behaves for you" — appearance, account, privacy. Resume
-/// and Subscription used to have quick-link cards here too; both are now
+/// "How the app behaves for you" — appearance, account. Resume and
+/// Subscription used to have quick-link cards here too; both are now
 /// their own drawer destinations instead (see `app_drawer.dart`), so
 /// they're not duplicated in this list.
+///
+/// Profile visibility (Public/Private) was built (`profile_visibility_provider.dart`)
+/// but is deliberately not surfaced here: no employer-facing view of any
+/// profile exists yet, so a toggle with nothing to enforce read as the
+/// app announcing an unfinished half of itself. Re-add to this screen
+/// once there's an actual audience for a profile to be visible to.
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
@@ -39,7 +44,6 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final text = Theme.of(context).textTheme;
     final themeMode = ref.watch(themeModeProvider);
-    final visibility = ref.watch(profileVisibilityProvider);
     final accountState = ref.watch(accountControllerProvider);
 
     ref.listen(accountControllerProvider, (previous, next) {
@@ -70,39 +74,6 @@ class SettingsScreen extends ConsumerWidget {
             onSelectionChanged: (selection) {
               ref.read(themeModeProvider.notifier).setThemeMode(selection.first);
             },
-          ),
-          const SizedBox(height: 28),
-
-          Text('Privacy & visibility', style: text.titleMedium),
-          const SizedBox(height: 4),
-          Text(
-            // Honest about what this actually does today — see
-            // profile_visibility_provider.dart's doc comment.
-            'Nothing currently shows your profile to anyone else (no employer accounts '
-            'exist yet), so this has nothing to enforce yet — it just saves your '
-            'preference for when that exists.',
-            style: text.bodySmall,
-          ),
-          const SizedBox(height: 10),
-          Card(
-            child: RadioGroup<ProfileVisibility>(
-              groupValue: visibility,
-              onChanged: (value) => ref.read(profileVisibilityProvider.notifier).setVisibility(value!),
-              child: const Column(
-                children: [
-                  RadioListTile<ProfileVisibility>(
-                    title: Text('Public'),
-                    subtitle: Text('Your profile can be discovered by employers/recruiters.'),
-                    value: ProfileVisibility.public,
-                  ),
-                  RadioListTile<ProfileVisibility>(
-                    title: Text('Private'),
-                    subtitle: Text('Your profile is visible only to you.'),
-                    value: ProfileVisibility.private,
-                  ),
-                ],
-              ),
-            ),
           ),
           const SizedBox(height: 28),
 

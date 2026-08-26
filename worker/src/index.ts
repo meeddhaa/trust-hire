@@ -13,7 +13,6 @@ import {
 } from './prompts';
 import { checkAndConsumeRateLimit } from './rateLimiter';
 import { bandTrustBadge, computeRuleScore, computeScamRuleFlags } from './scamRules';
-import { getStorageObjectBase64 } from './storageClient';
 import type {
   JobCoachGeminiResult,
   JobListingDoc,
@@ -158,7 +157,12 @@ async function handleResumeTailor(request: Request, env: Env, uid: string): Prom
   const listing = await getDocument(env, `listings/${listingId}`);
   if (!listing) return errorResponse(404, `No listing with id "${listingId}"`);
 
-  const resumeBase64 = await getStorageObjectBase64(env, `resumes/${uid}/resume.pdf`);
+  // Resume lives as a base64 field on the profile doc itself (see
+  // "Decision: resume storage, twice reconsidered" in docs/ARCHITECTURE.md
+  // for why this isn't a separate file store) — one Firestore read covers
+  // both the profile and the resume, no separate storage client needed.
+  const profile = await getDocument(env, `users/${uid}`);
+  const resumeBase64 = (profile as unknown as UserProfileDoc | null)?.resumeBase64;
   if (!resumeBase64) return errorResponse(404, 'Upload a resume in Settings before tailoring it');
 
   const rateLimit = await checkAndConsumeRateLimit(env, uid);
@@ -200,7 +204,7 @@ async function handleJobCoach(request: Request, env: Env, uid: string): Promise<
 
   const profile = await getDocument(env, `users/${uid}`);
   const listing = listingId ? await getDocument(env, `listings/${listingId}`) : null;
-  const resumeBase64 = await getStorageObjectBase64(env, `resumes/${uid}/resume.pdf`);
+  const resumeBase64 = (profile as unknown as UserProfileDoc | null)?.resumeBase64;
 
   const rateLimit = await checkAndConsumeRateLimit(env, uid);
   if (!rateLimit.allowed) {
@@ -212,7 +216,7 @@ async function handleJobCoach(request: Request, env: Env, uid: string): Promise<
     question,
     profile: (profile as unknown as UserProfileDoc) ?? undefined,
     listing: (listing as unknown as JobListingDoc) ?? undefined,
-    hasResume: resumeBase64 !== null,
+    hasResume: resumeBase64 != null,
   });
   const result = await callGeminiForJson<JobCoachGeminiResult>(
     env,

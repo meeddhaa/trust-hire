@@ -47,10 +47,12 @@ dependencies:
   go_router: ^14.6.2
 
   # --- Firebase ---
+  # No firebase_storage: resumes are stored as a base64 Firestore field
+  # instead of a separate file store — see "Decision: resume storage,
+  # twice reconsidered" in docs/ARCHITECTURE.md.
   firebase_core: ^3.8.0
   firebase_auth: ^5.3.3
   cloud_firestore: ^5.5.0
-  firebase_storage: ^12.3.6
   google_sign_in: ^6.2.2
 
   # --- Networking (Cloudflare Worker relay + bdapps API) ---

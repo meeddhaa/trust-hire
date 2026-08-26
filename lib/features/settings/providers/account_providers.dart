@@ -4,7 +4,8 @@ import '../../../core/providers/repository_providers.dart';
 import '../../../core/providers/session_providers.dart';
 
 /// Orchestrates account deletion: everything the client owns and can
-/// delete (applications, saved jobs, resume file, profile doc) goes
+/// delete (applications, saved jobs, profile doc — which includes the
+/// resume, stored as a field on it, see `UserProfile.resumeBase64`) goes
 /// first, then the Auth account itself — deleting Auth first would leave
 /// an orphaned, un-authorized-to-delete trail of the user's own data.
 ///
@@ -26,11 +27,6 @@ class AccountController extends AsyncNotifier<void> {
     state = await AsyncValue.guard(() async {
       await ref.read(applicationRepositoryProvider).deleteAllForUser(uid);
       await ref.read(savedJobRepositoryProvider).deleteAllForUser(uid);
-      try {
-        await ref.read(resumeServiceProvider).deleteResume(uid);
-      } catch (_) {
-        // No resume to delete is fine; don't block account deletion on it.
-      }
       await ref.read(profileRepositoryProvider).deleteProfile(uid);
       await ref.read(firebaseAuthServiceProvider).deleteAccount();
     });

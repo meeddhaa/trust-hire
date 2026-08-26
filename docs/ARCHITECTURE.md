@@ -241,31 +241,53 @@ experience); Settings (`/settings`, reached via a gear icon on Profile)
 holds "how the app behaves for you" — appearance, resume upload/status,
 manage subscription, sign out.
 
-## Decision: Firebase Storage and resume upload, reconsidered
+## Decision: resume storage, twice reconsidered
 
-Firebase requires the **Blaze** (pay-as-you-go) plan to use Storage at
-all, even at zero usage — Spark doesn't support it. Originally decided
-against enabling it for exactly that reason: onboarding collected skills
-as typed input instead of a parsed resume, and `UserProfile.resumeStoragePath`
-was left in the model, nullable and unused, in case this got revisited.
+Three rounds on where a resume actually lives, each forced by a real
+constraint hit along the way, not preference:
 
-It got revisited: after using the app, real resume-based matching (not
-just typed skill chips) was specifically asked for, along with an actual
-Gemini-powered resume-tailoring feature per listing — a materially
-different, higher-value AI feature than typed-skill matching alone, and
-worth the Blaze upgrade for. `storage.rules` (owner-only, PDF-only, 10MB
-cap) was already written and just needed deploying once Storage was
-enabled.
+**Round 1 — skip it.** Firebase requires the **Blaze** (pay-as-you-go)
+plan to use Storage at all, even at zero usage — Spark doesn't support
+it. Decided against enabling it: onboarding collected skills as typed
+input instead of a parsed resume, `UserProfile.resumeStoragePath` left in
+the model, nullable and unused, in case this got revisited.
 
-**How the PDF reaches Gemini**: no separate text-extraction step. The
-Worker's `/v1/resume-tailor` endpoint fetches the raw PDF bytes straight
-from Cloud Storage (`storageClient.ts`, read-only GCS REST access on the
-same service-account token as Firestore — scope extended in
-`serviceAccountAuth.ts`, which both clients now share) and sends them to
-Gemini as inline document data (`gemini.ts`'s `InlineFile` parts) —
-Gemini reads PDF content natively. Simpler and more robust than adding a
-PDF-parsing library, and one less thing that can silently mis-extract
-text from a resume's layout.
+**Round 2 — Firebase Storage, revisited.** After using the app, real
+resume-based matching (not just typed skill chips) was specifically
+asked for, plus an actual Gemini-powered resume-tailoring feature per
+listing — worth the Blaze upgrade for. Built: Storage upload/delete via
+`firebase_storage`, and a Worker endpoint that fetched the PDF from Cloud
+Storage (a GCS REST client, `storageClient.ts`, reading with an extended
+service-account scope) and sent it to Gemini as inline document data —
+no separate text-extraction step, Gemini reads PDF content natively.
+
+**Round 3 — no billing card exists, full stop.** Blaze couldn't actually
+be enabled (no card to put on file). Cloudflare R2 was the next
+candidate — already have a working Worker, R2 has a genuine free tier —
+but checking its own console enable flow live showed it *also* requires
+a payment method on file for activation (same "$0 at this usage level,
+card required anyway" pattern as Blaze). With literally no card
+available for either, landed on the one option needing zero billing
+setup anywhere: **the resume PDF, base64-encoded, stored as a field
+directly on the `users/{uid}` Firestore document** — Firestore's free
+Spark tier has never required a card (confirmed the hard way: everything
+in this app has run on it all along). `UserProfile.resumeStoragePath`
+became `resumeBase64`; `firebase_storage` dependency, `storageClient.ts`,
+and the extended `serviceAccountAuth.ts` Storage scope were all removed
+— the Worker now reads the resume off the same Firestore profile fetch
+it already does for match/job-coach, no second client needed at all.
+
+Real constraint this adds: Firestore caps a document at 1MiB, and base64
+inflates raw bytes by ~4/3, so the upload picker enforces a **700KB raw
+PDF cap** (`resume_screen.dart`) — generous for a text-based resume,
+tight for anything image-heavy. `storage.rules` and the R2 exploration
+are dead ends now, not deferred-for-later — left in git history, not
+actively maintained.
+
+**How the PDF still reaches Gemini natively**: unchanged from Round 2 —
+sent as inline document data (`gemini.ts`'s `InlineFile` parts, now
+built from the Firestore-stored base64 directly), no PDF-parsing library,
+no text-extraction step that could silently mis-read a resume's layout.
 
 **Why resume-tailoring isn't cached** (unlike `MatchResult`/`ScamAssessment`):
 a resume can change anytime and this is a lower-traffic, user-triggered

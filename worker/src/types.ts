@@ -24,6 +24,11 @@ export interface UserProfileDoc {
   skills: string[];
   yearsOfExperience?: number;
   educationLevel?: string;
+  /** Base64-encoded resume PDF, or absent if none uploaded — see
+   * "Decision: resume storage, twice reconsidered" in
+   * docs/ARCHITECTURE.md for why this lives directly on the profile doc
+   * instead of a separate file store. */
+  resumeBase64?: string;
 }
 
 export interface ScamRuleFlags {

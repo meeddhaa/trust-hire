@@ -8,8 +8,8 @@ Gemini for structured JSON reasoning, and writes results back to
 Firestore.
 
 **Deployed and verified end-to-end** at
-`https://trusthire-ai-relay.nafisa-notesapp.workers.dev` — both endpoints
-tested live against real Firebase Auth tokens, real Firestore reads/writes,
+`https://trusthire-ai-relay.nafisa-notesapp.workers.dev` — `/v1/match` and
+`/v1/scam-assessment` tested live against real Firebase Auth tokens, real Firestore reads/writes,
 and real Gemini calls (clean listing → `verifiedLeaning` with grounded
 reasoning; a listing seeded with all five scam signals → `highRisk` with
 per-signal reasoning; a match call → correctly matched/gap skills in the
@@ -49,8 +49,34 @@ shared by every user), returns a cached `scamAssessments/{listingId}` if
 current, otherwise calls Gemini for the reasoning text and caches the full
 result.
 
-Both: `429` if the caller has hit `RATE_LIMIT_PER_USER_PER_DAY` for today
-(only actual Gemini calls count against this — a cache hit is free).
+### `POST /v1/resume-tailor`
+```json
+{ "listingId": "abc123" }
+```
+Reads the caller's resume off `users/{uid}.resumeBase64` (base64-encoded
+PDF, stored directly on the profile doc — see "Decision: resume storage,
+twice reconsidered" in `docs/ARCHITECTURE.md`) and sends it to Gemini as
+inline document data alongside the listing, asking for a tailored
+summary/keywords/suggestions. `404` if no resume is on file. Not cached —
+a resume can change anytime and this is a lower-traffic, user-triggered
+action, not eager on page load.
+
+### `POST /v1/job-coach`
+```json
+{ "intent": "improve_resume", "listingId": "abc123", "question": "..." }
+```
+`intent` is one of `improve_resume` / `analyze_job` / `interview_prep` /
+`skill_gaps` / `career_guidance` / `custom`; `listingId` and `question`
+are both optional context. Uses whatever's available (profile always,
+listing/resume if present) — the system instruction explicitly refuses
+anything outside job-search/career topics. Also not cached — single-shot
+per question, no persisted multi-turn memory (see
+docs/ARCHITECTURE.md → "Job Coach: one AI identity, not three").
+
+All four endpoints: `429` if the caller has hit `RATE_LIMIT_PER_USER_PER_DAY`
+for today (only actual Gemini calls count against this — a cache hit on
+`/v1/match`/`/v1/scam-assessment` is free; `/v1/resume-tailor` and
+`/v1/job-coach` always call Gemini since they're never cached).
 
 ## One-time setup
 

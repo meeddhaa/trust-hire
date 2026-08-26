@@ -50,15 +50,45 @@ class ScamRuleEngine {
   static const _implausibleSalaryBdt = 300000;
   static const _seniorSkillCountThreshold = 2;
 
+  /// A large figure ($ or BDT-style) mentioned in free text — real gap
+  /// found in production: JSearch-sourced listings never populate
+  /// salaryMin/salaryMax, so a genuine "$100,000/year" sitting in a title
+  /// was invisible to the structured check below. Matched only alongside
+  /// explicit no-qualification-needed language, not on its own — a high
+  /// figure alone is what plenty of legitimate senior/remote roles
+  /// advertise; "huge pay + no real qualification needed" is the actual
+  /// pattern, not the pay by itself.
+  static final _largeFigurePatterns = [
+    RegExp(r'\$[\d,]{5,}'),
+    RegExp(r'(?:bdt|taka)\s?[\d,]{6,}', caseSensitive: false),
+    RegExp(r'[\d,]{6,}\s?(?:bdt|taka)', caseSensitive: false),
+  ];
+  static final _noQualificationPatterns = [
+    RegExp(r'no\s+experience\s+(needed|required)', caseSensitive: false),
+    RegExp(r'entry[\s-]level', caseSensitive: false),
+    RegExp(r'fresher', caseSensitive: false),
+    RegExp(r'anyone\s+can\s+apply', caseSensitive: false),
+    RegExp(r'no\s+skills?\s+required', caseSensitive: false),
+  ];
+
   static ScamRuleFlags computeFlags(JobListing listing) {
     final domain = listing.companyDomain?.toLowerCase().trim();
+    final combinedText = '${listing.title} ${listing.description}';
 
     final salaryMax = listing.salaryMax;
     final salaryMin = listing.salaryMin;
-    final unrealisticSalary = salaryMax != null &&
+    final structuredSalaryUnrealistic = salaryMax != null &&
         ((salaryMin != null && salaryMin > salaryMax) ||
             (salaryMax > _implausibleSalaryBdt &&
                 listing.requiredSkills.length < _seniorSkillCountThreshold));
+
+    // Only a fallback for listings with no structured salary at all —
+    // avoids disagreeing with the structured check when one exists.
+    final textSalaryUnrealistic = salaryMax == null &&
+        _largeFigurePatterns.any((p) => p.hasMatch(combinedText)) &&
+        _noQualificationPatterns.any((p) => p.hasMatch(combinedText));
+
+    final unrealisticSalary = structuredSalaryUnrealistic || textSalaryUnrealistic;
 
     return ScamRuleFlags(
       upfrontFeesRequested: listing.applicationFeeRequired ||

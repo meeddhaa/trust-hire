@@ -37,9 +37,12 @@ data layer) decides what a free-tier user actually gets shown. See
 skills (the input side of the match diff), experience, onboarding-complete
 flag the router redirects on. Named `UserProfile` rather than `User` to
 avoid colliding with `firebase_auth`'s `User`. Carries a nullable
-`resumeStoragePath` that's currently always unset — Storage needs the
-Blaze plan to enable, so onboarding collects skills as typed input
-instead; see "Decision: no Firebase Storage" in `docs/ARCHITECTURE.md`.
+`resumeBase64` — the uploaded resume PDF, base64-encoded, stored directly
+on this doc rather than a separate file store (both Firebase Storage and
+Cloudflare R2 need a billing card on file even at $0 actual cost, which
+wasn't available); see "Decision: resume storage, twice reconsidered" in
+`docs/ARCHITECTURE.md`. Keeps the whole document under Firestore's 1MiB
+cap, hence the 700KB raw-upload limit in `resume_screen.dart`.
 
 **`JobListing`** (`job_listing.dart`) — a seeded listing. Fields double as
 raw input to the rule-based scam scorer (step 3): `companyDomain`,

@@ -67,6 +67,43 @@ describe('computeScamRuleFlags', () => {
     expect(flags.unrealisticSalary).toBe(true);
   });
 
+  it('flags a large figure in free text combined with no-qualification language, when structured salary is absent', () => {
+    const flags = computeScamRuleFlags(
+      listing({
+        salaryMin: undefined,
+        salaryMax: undefined,
+        title: 'Data Entry Job - Earn $50,000/year, No Experience Needed',
+      }),
+    );
+    expect(flags.unrealisticSalary).toBe(true);
+  });
+
+  it('does not flag a large figure in free text without no-qualification language (a real senior/remote role)', () => {
+    const flags = computeScamRuleFlags(
+      listing({
+        salaryMin: undefined,
+        salaryMax: undefined,
+        title: 'Engineering Director (OTE $100,000/year USD)',
+        description: 'Lead our platform engineering team. 8+ years experience required.',
+      }),
+    );
+    expect(flags.unrealisticSalary).toBe(false);
+  });
+
+  it('does not double-flag via text when structured salary is already present', () => {
+    const flags = computeScamRuleFlags(
+      listing({
+        salaryMin: 40000,
+        salaryMax: 60000,
+        title: 'Entry level role, no experience needed, $50,000',
+        requiredSkills: ['Node.js', 'PostgreSQL', 'AWS'],
+      }),
+    );
+    // Structured range (40k-60k BDT) is plausible on its own -- the text
+    // mention shouldn't override that via the fallback path.
+    expect(flags.unrealisticSalary).toBe(false);
+  });
+
   it('flags a missing company domain', () => {
     const flags = computeScamRuleFlags(listing({ companyDomain: undefined }));
     expect(flags.noVerifiableDomain).toBe(true);

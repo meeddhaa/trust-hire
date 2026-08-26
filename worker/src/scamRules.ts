@@ -47,14 +47,43 @@ const FEE_PATTERNS = [
 const IMPLAUSIBLE_SALARY_BDT = 300_000;
 const SENIOR_SKILL_COUNT_THRESHOLD = 2;
 
+/** A large figure ($ or BDT-style) mentioned in free text — title or
+ * description — for listings that don't disclose salary in the
+ * structured fields at all (real gap found in production: JSearch never
+ * populates salaryMin/salaryMax, so a genuine "$100,000/year" in a title
+ * was invisible to the check above). Matched only in combination with
+ * explicit no-qualification-needed language below, not on its own — a
+ * high figure alone is what plenty of legitimate senior/remote roles
+ * advertise; it's "huge pay + no real qualification needed" that's the
+ * actual scam pattern, not the pay by itself. */
+const LARGE_FIGURE_PATTERNS = [/\$[\d,]{5,}/, /(?:bdt|taka)\s?[\d,]{6,}/i, /[\d,]{6,}\s?(?:bdt|taka)/i];
+const NO_QUALIFICATION_PATTERNS = [
+  /no\s+experience\s+(needed|required)/i,
+  /entry[\s-]level/i,
+  /fresher/i,
+  /anyone\s+can\s+apply/i,
+  /no\s+skills?\s+required/i,
+];
+
 export function computeScamRuleFlags(listing: JobListingDoc): ScamRuleFlags {
   const domain = listing.companyDomain?.toLowerCase().trim();
+  const combinedText = `${listing.title} ${listing.description}`;
 
-  const unrealisticSalary =
+  const structuredSalaryUnrealistic =
     listing.salaryMax !== undefined &&
     ((listing.salaryMin !== undefined && listing.salaryMin > listing.salaryMax) ||
       (listing.salaryMax > IMPLAUSIBLE_SALARY_BDT &&
         listing.requiredSkills.length < SENIOR_SKILL_COUNT_THRESHOLD));
+
+  // Only a fallback for listings with no structured salary at all — if
+  // salaryMax is already set, the check above already covers it, and we
+  // don't want the two checks to disagree with each other.
+  const textSalaryUnrealistic =
+    listing.salaryMax === undefined &&
+    LARGE_FIGURE_PATTERNS.some((p) => p.test(combinedText)) &&
+    NO_QUALIFICATION_PATTERNS.some((p) => p.test(combinedText));
+
+  const unrealisticSalary = structuredSalaryUnrealistic || textSalaryUnrealistic;
 
   return {
     upfrontFeesRequested:

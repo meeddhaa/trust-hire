@@ -64,14 +64,15 @@ class ProfileRepository {
     }
   }
 
-  /// Records where the resume landed in Storage (or `null` to clear it
-  /// after a delete) — `ResumeService` handles the actual file, this just
-  /// keeps the profile doc's pointer to it in sync.
-  Future<void> setResumeStoragePath(String uid, String? path) async {
+  /// Saves (or, with `null`, clears) the base64-encoded resume PDF
+  /// directly on the profile doc — see "Decision: resume storage, twice
+  /// reconsidered" in docs/ARCHITECTURE.md for why there's no separate
+  /// file store involved.
+  Future<void> setResumeBase64(String uid, String? base64) async {
     try {
-      await _doc(uid).update({'resumeStoragePath': path, 'updatedAt': Timestamp.now()});
+      await _doc(uid).update({'resumeBase64': base64, 'updatedAt': Timestamp.now()});
     } on FirebaseException {
-      throw const NetworkFailure("Couldn't save your resume info — check your internet and try again.");
+      throw const NetworkFailure("Couldn't save your resume — check your internet and try again.");
     }
   }
 

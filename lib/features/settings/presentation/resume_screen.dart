@@ -8,12 +8,18 @@ import '../../../shared/widgets/expandable_section.dart';
 import '../providers/resume_providers.dart';
 
 /// Upload/replace/remove a resume PDF, plus a written template for anyone
-/// who doesn't have one yet. Storage requires the Blaze plan — see
-/// "Decision: no Firebase Storage" (and the entry right after it) in
-/// docs/ARCHITECTURE.md for why this was skipped originally and why it
-/// came back.
+/// who doesn't have one yet. Stored as a base64 field directly on the
+/// profile doc, not a separate file store — see "Decision: resume
+/// storage, twice reconsidered" in docs/ARCHITECTURE.md (both Firebase
+/// Storage and Cloudflare R2 need a billing card on file, even at $0
+/// actual cost, which wasn't available).
 class ResumeScreen extends ConsumerWidget {
   const ResumeScreen({super.key});
+
+  /// Firestore caps a whole document at 1MiB, and base64 inflates raw
+  /// bytes by ~4/3 — 700KB raw leaves comfortable headroom (≈933KB
+  /// encoded) for the rest of the profile doc's fields.
+  static const _maxResumeBytes = 700 * 1024;
 
   Future<void> _pickAndUpload(BuildContext context, WidgetRef ref) async {
     final result = await FilePicker.platform.pickFiles(
@@ -24,11 +30,11 @@ class ResumeScreen extends ConsumerWidget {
     final file = result?.files.singleOrNull;
     if (file == null || file.bytes == null) return;
 
-    if (file.size > 10 * 1024 * 1024) {
+    if (file.size > _maxResumeBytes) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
-          ..showSnackBar(const SnackBar(content: Text('That file is over the 10MB limit.')));
+          ..showSnackBar(const SnackBar(content: Text('That file is over the 700KB limit — try a text-based PDF export.')));
       }
       return;
     }
@@ -68,7 +74,7 @@ class ResumeScreen extends ConsumerWidget {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (error, _) => Text(error.toString(), style: text.bodyMedium),
             data: (profile) {
-              final hasResume = profile?.resumeStoragePath != null;
+              final hasResume = profile?.resumeBase64 != null;
               return Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -103,7 +109,7 @@ class ResumeScreen extends ConsumerWidget {
             onPressed: isBusy ? null : () => _pickAndUpload(context, ref),
             icon: const Icon(Icons.upload_file_outlined),
             label: Text(
-              profileAsync.value?.resumeStoragePath != null ? 'Replace resume (PDF)' : 'Upload resume (PDF)',
+              profileAsync.value?.resumeBase64 != null ? 'Replace resume (PDF)' : 'Upload resume (PDF)',
             ),
           ),
           const SizedBox(height: 32),

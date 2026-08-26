@@ -1,10 +1,14 @@
 /**
- * Google service-account OAuth token exchange (JWT bearer flow), shared
- * by `firestoreClient.ts` and `storageClient.ts` — both Firestore and
- * Cloud Storage REST calls authenticate as the same service account, just
- * with different scopes on the same token. Extracted here once a second
- * client (`storageClient.ts`, for resume-tailoring) needed the identical
- * token-fetch/cache logic instead of a copy-pasted duplicate.
+ * Google service-account OAuth token exchange (JWT bearer flow) for
+ * `firestoreClient.ts` — the Firestore Admin-equivalent credential that
+ * bypasses `firestore.rules` for matchResults/scamAssessments writes.
+ *
+ * Previously also covered a Cloud Storage read scope for resume-tailoring
+ * (a `storageClient.ts` fetched an uploaded resume from a separate file
+ * store); removed once resume storage moved to a base64 field directly on
+ * the profile doc — see "Decision: resume storage, twice reconsidered" in
+ * docs/ARCHITECTURE.md. One less scope, one less client, same Firestore
+ * read now covers both profile and resume.
  *
  * The token is cached at module scope and refreshed proactively before
  * expiry — a shared, non-request-specific credential (like the JWKS
@@ -21,14 +25,7 @@ interface CachedToken {
   expiresAtMs: number;
 }
 
-// One token covers both scopes this Worker needs — Firestore admin
-// access (matchResults/scamAssessments writes) and read-only Storage
-// access (fetching an uploaded resume for tailoring). Requesting both
-// up front avoids juggling two separate token caches for one identity.
-const SCOPES = [
-  'https://www.googleapis.com/auth/datastore',
-  'https://www.googleapis.com/auth/devstorage.read_only',
-].join(' ');
+const SCOPES = 'https://www.googleapis.com/auth/datastore';
 
 let tokenCache: CachedToken | null = null;
 

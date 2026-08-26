@@ -1,7 +1,13 @@
 rules_version = '2';
 
-// Resume/CV uploads, used for the onboarding profile build and as context
-// for the match-gap LLM call. Each user can only touch their own file.
+// DEAD END, not deferred: Firebase Storage requires the Blaze plan (a
+// billing card on file, even at $0 actual usage), which wasn't available.
+// Resumes ended up as a base64 field directly on the Firestore profile
+// doc instead — see "Decision: resume storage, twice reconsidered" in
+// docs/ARCHITECTURE.md for the full path (Storage, then Cloudflare R2 —
+// which turned out to need a card too — then this). Storage was never
+// actually enabled on the project; these rules were written but never
+// deployed, and stay here only as a record of that attempt.
 
 service firebase.storage {
   match /b/{bucket}/o {
