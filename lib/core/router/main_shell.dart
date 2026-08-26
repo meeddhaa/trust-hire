@@ -46,11 +46,11 @@ class MainShell extends StatelessWidget {
   }
 }
 
-/// A floating rounded-stadium bar with circular per-icon active states —
-/// not the stock Material [NavigationBar] — per the user-supplied
-/// reference's bottom nav: individual circular icon buttons, the active
-/// one filled solid in the accent color, rather than one shared indicator
-/// pill sliding under a row of icon+label pairs.
+/// A floating rounded-stadium bar — not the stock Material
+/// [NavigationBar] — per the user-supplied reference's bottom nav: the
+/// active tab widens into an icon+label pill, the other tabs stay
+/// icon-only circles, rather than one shared indicator sliding under a
+/// row of identical icon+label pairs.
 class _FloatingNavBar extends StatelessWidget {
   const _FloatingNavBar({
     required this.currentIndex,
@@ -67,10 +67,10 @@ class _FloatingNavBar extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     return SafeArea(
-      minimum: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      minimum: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: Container(
         height: 64,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
           color: scheme.surface,
           borderRadius: BorderRadius.circular(32),
@@ -112,23 +112,37 @@ class _NavIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
     return Tooltip(
       message: label,
       child: InkWell(
         onTap: onTap,
-        customBorder: const CircleBorder(),
+        borderRadius: BorderRadius.circular(24),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          width: 46,
+          curve: Curves.easeOut,
           height: 46,
+          padding: EdgeInsets.symmetric(horizontal: selected ? 16 : 11),
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
             color: selected ? scheme.primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(24),
           ),
-          child: Icon(
-            selected ? filledIcon : outlineIcon,
-            color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
-            size: 22,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                selected ? filledIcon : outlineIcon,
+                color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
+                size: 21,
+              ),
+              if (selected) ...[
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: text.labelMedium?.copyWith(color: scheme.onPrimary, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ],
           ),
         ),
       ),

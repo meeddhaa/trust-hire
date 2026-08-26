@@ -50,16 +50,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         branches: [
           StatefulShellBranch(
             routes: [
-              GoRoute(
-                path: '/listings',
-                builder: (context, state) => const ListingsFeedScreen(),
-                routes: [
-                  GoRoute(
-                    path: ':id',
-                    builder: (context, state) => ListingDetailScreen(listingId: state.pathParameters['id']!),
-                  ),
-                ],
-              ),
+              GoRoute(path: '/listings', builder: (context, state) => const ListingsFeedScreen()),
             ],
           ),
           StatefulShellBranch(routes: [
@@ -81,6 +72,20 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
           ]),
         ],
+      ),
+
+      // Listing detail — outside the shell, not nested under `/listings`
+      // as a shell-branch child route as it originally was: nesting it
+      // there kept the shell's persistent bottom nav bar visible behind
+      // the detail screen's own pinned "View original posting" button,
+      // stacking two bottom bars on top of each other (a real bug, caught
+      // live on device once that button became a pinned
+      // `bottomNavigationBar` rather than just the last item in the
+      // scroll content). A top-level route pushes fully over the shell,
+      // same as Settings/Resume/etc. below.
+      GoRoute(
+        path: '/listings/:id',
+        builder: (context, state) => ListingDetailScreen(listingId: state.pathParameters['id']!),
       ),
 
       // Account management — outside the shell, pushed on top with a

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import '../../../core/errors/failure.dart';
 import '../../../core/providers/repository_providers.dart';
 import '../../../core/providers/session_providers.dart';
@@ -35,22 +36,35 @@ class ListingDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final listingAsync = ref.watch(listingByIdProvider(listingId));
+    final listing = listingAsync.valueOrNull;
+    final uid = ref.read(currentUidProvider);
+    // A plain top bar (not a transparent one floating over the photo) —
+    // matches the reference's "< Details 🔖" bar, which sits on its own
+    // plain background above a separately inset photo card, not overlaid
+    // on it.
+    final isSaved = listing == null ? false : ref.watch(isJobSavedProvider(listing.id)).valueOrNull ?? false;
 
     return Scaffold(
-      // Transparent + extendBodyBehindAppBar so the hero banner (see
-      // `_ListingDetailBody`) scrolls up under the status bar with the
-      // back button floating on top of it — the reference's "circular
-      // icon buttons over a photo header" pattern, applied to our colored
-      // banner instead of a photo (see that widget's doc comment for why).
-      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: Padding(
-          padding: const EdgeInsets.all(8),
-          child: _CircleIconButton(icon: Icons.arrow_back_rounded, onTap: () => context.pop()),
-        ),
+        title: const Text('Details'),
+        actions: [
+          if (listing != null)
+            IconButton(
+              icon: Icon(isSaved ? Icons.bookmark : Icons.bookmark_border),
+              color: isSaved ? Theme.of(context).colorScheme.primary : null,
+              tooltip: isSaved ? 'Remove from saved' : 'Save for later',
+              onPressed: uid == null
+                  ? null
+                  : () {
+                      final repo = ref.read(savedJobRepositoryProvider);
+                      if (isSaved) {
+                        repo.unsave(uid: uid, listingId: listing.id);
+                      } else {
+                        repo.save(uid: uid, listingId: listing.id);
+                      }
+                    },
+            ),
+        ],
       ),
       body: listingAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -65,6 +79,25 @@ class ListingDetailScreen extends ConsumerWidget {
           return _ListingDetailBody(listing: listing);
         },
       ),
+      // Pinned, not just the last item in the scroll content — matches
+      // the reference's fixed "Apply for this Job" button. We redirect to
+      // the original posting rather than hosting our own application
+      // flow, so this is the closest equivalent action.
+      bottomNavigationBar: listing == null
+          ? null
+          : SafeArea(
+              minimum: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+              child: ElevatedButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => SourceWebviewScreen(url: listing.sourceUrl, title: listing.company),
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                icon: const Icon(Icons.open_in_new_rounded),
+                label: const Text('View original posting'),
+              ),
+            ),
     );
   }
 }
@@ -74,83 +107,102 @@ class _ListingDetailBody extends ConsumerWidget {
 
   final JobListing listing;
 
+  static final _salaryFormat = NumberFormat.decimalPattern();
+
+  String? _salaryLine() {
+    final min = listing.salaryMin;
+    final max = listing.salaryMax;
+    if (min == null && max == null) return null;
+    final currency = listing.salaryCurrency;
+    if (min != null && max != null) {
+      return '${_salaryFormat.format(min)}–${_salaryFormat.format(max)} $currency / month';
+    }
+    return '${_salaryFormat.format(min ?? max)} $currency / month';
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
     final subscription = ref.watch(currentSubscriptionProvider).valueOrNull;
     final isPaid = subscription?.isPaid ?? false;
+    final salaryLine = _salaryLine();
 
     return SingleChildScrollView(
-      padding: EdgeInsets.zero,
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _HeroBanner(listing: listing),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _ApplicationStatusRow(listingId: listing.id),
-                const SizedBox(height: 20),
+          // Inset, padded photo panel — not full-bleed under the app bar —
+          // matching the reference's separately-carded photo below its
+          // plain top bar. Flat color instead of a real photo; see
+          // `job_listing_card.dart`'s doc comment for why.
+          _PhotoPanel(listing: listing),
+          const SizedBox(height: 18),
+          Text(listing.title, style: text.headlineMedium),
+          const SizedBox(height: 4),
+          Text(
+            '${listing.company} · ${listing.location}${listing.isRemote ? ' · Remote' : ''}',
+            style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+          if (salaryLine != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              salaryLine,
+              style: text.titleLarge?.copyWith(color: scheme.primary, fontWeight: FontWeight.w800),
+            ),
+          ],
+          const SizedBox(height: 20),
+          _ApplicationStatusRow(listingId: listing.id),
+          const SizedBox(height: 20),
 
-                _MatchSection(listing: listing, isPaid: isPaid),
-                const SizedBox(height: 20),
-                _TrustSection(listing: listing, isPaid: isPaid),
-                const SizedBox(height: 20),
-                _DescriptionSection(listing: listing),
-                const SizedBox(height: 20),
+          _MatchSection(listing: listing, isPaid: isPaid),
+          const SizedBox(height: 20),
+          _TrustSection(listing: listing, isPaid: isPaid),
+          const SizedBox(height: 20),
 
-                if (isPaid) ...[
-                  _ResumeTailorSection(listing: listing),
-                  const SizedBox(height: 20),
-                ],
+          // A single grouped, bordered list of "more detail" rows — the
+          // reference's "About the Company / Responsibilities /
+          // Requirements / Benefits" accordion pattern. Only one row for
+          // now (see that widget's doc comment for why the others aren't
+          // synthesized), but styled as the same kind of container so
+          // adding more later doesn't need a redesign.
+          _MoreDetailsCard(listing: listing),
+          const SizedBox(height: 20),
 
-                if (!isPaid)
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.lock_outline_rounded),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'Unlock the full gap breakdown, upskilling roadmap, and scam-risk reasoning.',
-                              style: text.bodyMedium,
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () => context.push('/paywall'),
-                            child: const Text('Upgrade'),
-                          ),
-                        ],
+          if (isPaid) ...[
+            _ResumeTailorSection(listing: listing),
+            const SizedBox(height: 20),
+          ],
+
+          if (!isPaid)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    const Icon(Icons.lock_outline_rounded),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Unlock the full gap breakdown, upskilling roadmap, and scam-risk reasoning.',
+                        style: text.bodyMedium,
                       ),
                     ),
-                  ),
-
-                const SizedBox(height: 20),
-                // Filled/pill, not outlined — the closest thing this app
-                // has to the reference's bold "Apply for this Job" CTA
-                // (we redirect to the original posting rather than
-                // hosting our own application flow).
-                ElevatedButton.icon(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => SourceWebviewScreen(url: listing.sourceUrl, title: listing.company),
+                    TextButton(
+                      onPressed: () => context.push('/paywall'),
+                      child: const Text('Upgrade'),
                     ),
-                  ),
-                  icon: const Icon(Icons.open_in_new_rounded),
-                  label: const Text('View original posting'),
+                  ],
                 ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  onPressed: () => context.go('/job-coach?listingId=${listing.id}'),
-                  icon: const Icon(Icons.school_outlined),
-                  label: const Text('Get Job Coach advice'),
-                ),
-              ],
+              ),
             ),
+
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => context.go('/job-coach?listingId=${listing.id}'),
+            icon: const Icon(Icons.school_outlined),
+            label: const Text('Get Job Coach advice'),
           ),
         ],
       ),
@@ -158,89 +210,38 @@ class _ListingDetailBody extends ConsumerWidget {
   }
 }
 
-/// The colored "hero" banner replacing the reference's photo header — see
-/// `job_listing_card.dart`'s doc comment for why a flat color stands in
-/// for a real photo here too. Scrolls up under the transparent AppBar's
-/// floating back button (see `ListingDetailScreen`'s `extendBodyBehindAppBar`).
-class _HeroBanner extends ConsumerWidget {
-  const _HeroBanner({required this.listing});
+/// The inset colored panel standing in for the reference's product photo
+/// — see `job_listing_card.dart`'s doc comment for why a flat color
+/// (rather than a stock/generic photo) is the honest choice here. A large
+/// low-opacity building glyph gives it a bit of visual texture instead of
+/// being a completely flat color block.
+class _PhotoPanel extends StatelessWidget {
+  const _PhotoPanel({required this.listing});
 
   final JobListing listing;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final text = Theme.of(context).textTheme;
-    final panelColor = CompanyAvatar.colorFor(listing.company);
-    final topInset = MediaQuery.of(context).padding.top + kToolbarHeight;
-    final uid = ref.read(currentUidProvider);
-    final isSaved = ref.watch(isJobSavedProvider(listing.id)).valueOrNull ?? false;
-
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.fromLTRB(20, topInset + 12, 20, 20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [panelColor.withValues(alpha: 0.85), Color.lerp(panelColor, Colors.black, 0.55)!],
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Spacer(),
-              _CircleIconButton(
-                icon: isSaved ? Icons.bookmark : Icons.bookmark_border,
-                active: isSaved,
-                onTap: uid == null
-                    ? null
-                    : () {
-                        final repo = ref.read(savedJobRepositoryProvider);
-                        if (isSaved) {
-                          repo.unsave(uid: uid, listingId: listing.id);
-                        } else {
-                          repo.save(uid: uid, listingId: listing.id);
-                        }
-                      },
-              ),
-            ],
-          ),
-          const SizedBox(height: 28),
-          Text(listing.title, style: text.headlineMedium?.copyWith(color: Colors.white)),
-          const SizedBox(height: 4),
-          Text(listing.company, style: text.bodyLarge?.copyWith(color: Colors.white70)),
-          const SizedBox(height: 2),
-          Text(
-            '${listing.location}${listing.isRemote ? ' · Remote' : ''}',
-            style: text.bodyMedium?.copyWith(color: Colors.white70),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CircleIconButton extends StatelessWidget {
-  const _CircleIconButton({required this.icon, this.active = false, required this.onTap});
-
-  final IconData icon;
-  final bool active;
-  final VoidCallback? onTap;
-
-  @override
   Widget build(BuildContext context) {
-    final accent = Theme.of(context).colorScheme.primary;
-    return Material(
-      color: Colors.white.withValues(alpha: 0.9),
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Icon(icon, size: 20, color: active ? accent : Colors.black87),
+    final panelColor = CompanyAvatar.colorFor(listing.company);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: AspectRatio(
+        aspectRatio: 16 / 10,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [panelColor, Color.lerp(panelColor, Colors.black, 0.35)!],
+            ),
+          ),
+          child: Center(
+            child: Icon(
+              Icons.apartment_rounded,
+              size: 56,
+              color: Colors.white.withValues(alpha: 0.35),
+            ),
+          ),
         ),
       ),
     );
@@ -608,14 +609,16 @@ class _TrustContent extends StatelessWidget {
   }
 }
 
-/// The listing's full raw text, collapsed by default — echoes the
-/// reference's "Responsibilities / Requirements / Benefits" accordion
-/// pattern, but as a single section: JSearch's listings arrive as one
-/// unstructured description blob, not pre-split into those categories, and
-/// synthetically splitting it would risk misrepresenting what the
-/// original posting actually says.
-class _DescriptionSection extends StatelessWidget {
-  const _DescriptionSection({required this.listing});
+/// A grouped, bordered list of expandable "more detail" rows — the
+/// reference's "About the Company / Responsibilities / Requirements /
+/// Benefits" accordion, as one container rather than separate floating
+/// cards. Only "Job description" for now: JSearch's listings arrive as
+/// one unstructured description blob, not pre-split into those
+/// categories, and synthetically splitting it would risk misrepresenting
+/// what the original posting actually says. Expanded by default, echoing
+/// the reference's "About the Company" row (its only row shown open).
+class _MoreDetailsCard extends StatelessWidget {
+  const _MoreDetailsCard({required this.listing});
 
   final JobListing listing;
 
@@ -624,9 +627,10 @@ class _DescriptionSection extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         child: ExpandableSection(
           title: 'Job description',
+          initiallyExpanded: true,
           child: Text(listing.description, style: text.bodyMedium),
         ),
       ),
