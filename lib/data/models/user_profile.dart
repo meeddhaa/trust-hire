@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 
 import '../../core/utils/firestore_codec.dart';
+import 'work_experience_entry.dart';
 
 /// A user's profile as stored in `users/{uid}`: the input to the match-gap
 /// LLM call (skills, experience) plus onboarding/auth bookkeeping.
@@ -19,6 +20,8 @@ class UserProfile extends Equatable {
     this.yearsOfExperience,
     this.educationLevel,
     this.resumeBase64,
+    this.photoBase64,
+    this.workExperience = const [],
     this.onboardingComplete = false,
     required this.createdAt,
     required this.updatedAt,
@@ -52,6 +55,21 @@ class UserProfile extends Equatable {
   /// size check in `resume_screen.dart`.
   final String? resumeBase64;
 
+  /// A small JPEG thumbnail the user picked as their avatar, base64-encoded
+  /// and stored directly on this doc — same reasoning and constraint as
+  /// [resumeBase64] (no billing-free file store available), but resized/
+  /// re-encoded client-side first (see `ProfilePhotoController`) so it
+  /// stays tiny regardless of the original photo's size, instead of
+  /// rejecting anything over a hard cap the way the resume upload does.
+  final String? photoBase64;
+
+  /// Work history pulled from the resume upload — see `WorkExperienceEntry`
+  /// for why `duration` is free text. Wholesale-replaced on every resume
+  /// sync (see `ResumeController`), not merged entry-by-entry: there's no
+  /// manual "add experience" UI, so the resume is always the single source
+  /// of truth for this list.
+  final List<WorkExperienceEntry> workExperience;
+
   /// Gates the onboarding → feed redirect in the router. False until the
   /// user has entered at least skills once.
   final bool onboardingComplete;
@@ -83,6 +101,10 @@ class UserProfile extends Equatable {
       yearsOfExperience: map['yearsOfExperience'] as int?,
       educationLevel: map['educationLevel'] as String?,
       resumeBase64: map['resumeBase64'] as String?,
+      photoBase64: map['photoBase64'] as String?,
+      workExperience: (map['workExperience'] as List? ?? const [])
+          .map((entry) => WorkExperienceEntry.fromMap(Map<String, dynamic>.from(entry as Map)))
+          .toList(),
       onboardingComplete: map['onboardingComplete'] as bool? ?? false,
       createdAt: dateTimeFromValue(map['createdAt']),
       updatedAt: dateTimeFromValue(map['updatedAt']),
@@ -98,6 +120,8 @@ class UserProfile extends Equatable {
       'yearsOfExperience': yearsOfExperience,
       'educationLevel': educationLevel,
       'resumeBase64': resumeBase64,
+      'photoBase64': photoBase64,
+      'workExperience': workExperience.map((entry) => entry.toMap()).toList(),
       'onboardingComplete': onboardingComplete,
       'createdAt': timestampFromDateTime(createdAt),
       'updatedAt': timestampFromDateTime(updatedAt),
@@ -111,6 +135,8 @@ class UserProfile extends Equatable {
     int? yearsOfExperience,
     String? educationLevel,
     String? resumeBase64,
+    String? photoBase64,
+    List<WorkExperienceEntry>? workExperience,
     bool? onboardingComplete,
     DateTime? updatedAt,
   }) {
@@ -123,6 +149,8 @@ class UserProfile extends Equatable {
       yearsOfExperience: yearsOfExperience ?? this.yearsOfExperience,
       educationLevel: educationLevel ?? this.educationLevel,
       resumeBase64: resumeBase64 ?? this.resumeBase64,
+      photoBase64: photoBase64 ?? this.photoBase64,
+      workExperience: workExperience ?? this.workExperience,
       onboardingComplete: onboardingComplete ?? this.onboardingComplete,
       createdAt: createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
@@ -139,6 +167,8 @@ class UserProfile extends Equatable {
         yearsOfExperience,
         educationLevel,
         resumeBase64,
+        photoBase64,
+        workExperience,
         onboardingComplete,
         createdAt,
         updatedAt,

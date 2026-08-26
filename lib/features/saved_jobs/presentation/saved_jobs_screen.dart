@@ -64,8 +64,9 @@ class _SavedJobTile extends ConsumerWidget {
         ),
         subtitle: listingAsync.value?.company != null ? Text(listingAsync.value!.company) : null,
         trailing: IconButton(
-          icon: const Icon(Icons.bookmark_remove_outlined),
-          tooltip: 'Remove',
+          icon: const Icon(Icons.bookmark),
+          color: Theme.of(context).colorScheme.primary,
+          tooltip: 'Remove from saved',
           onPressed: uid == null
               ? null
               : () => ref.read(savedJobRepositoryProvider).unsave(uid: uid, listingId: savedJob.listingId),

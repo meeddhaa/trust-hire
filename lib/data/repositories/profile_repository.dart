@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import '../../core/constants/firestore_collections.dart';
 import '../../core/errors/failure.dart';
 import '../models/user_profile.dart';
+import '../models/work_experience_entry.dart';
 
 /// Reads/writes `users/{uid}` — the only collection the client is allowed
 /// to write directly (see `firestore.rules`: owner-only read/write).
@@ -73,6 +74,33 @@ class ProfileRepository {
       await _doc(uid).update({'resumeBase64': base64, 'updatedAt': Timestamp.now()});
     } on FirebaseException {
       throw const NetworkFailure("Couldn't save your resume — check your internet and try again.");
+    }
+  }
+
+  /// Saves (or, with `null`, clears) the base64-encoded avatar thumbnail —
+  /// same field-on-the-profile-doc approach as [setResumeBase64], but the
+  /// image is already resized/re-encoded small by `ProfilePhotoController`
+  /// before it ever reaches here.
+  Future<void> setPhotoBase64(String uid, String? base64) async {
+    try {
+      await _doc(uid).update({'photoBase64': base64, 'updatedAt': Timestamp.now()});
+    } on FirebaseException {
+      throw const NetworkFailure("Couldn't save your photo — check your internet and try again.");
+    }
+  }
+
+  /// Replaces the profile's work-experience list wholesale — see
+  /// `UserProfile.workExperience`'s doc comment for why this is a
+  /// replace, not a merge (there's no manual "add experience" entry
+  /// point, only the resume sync, so the resume is always authoritative).
+  Future<void> setWorkExperience(String uid, List<WorkExperienceEntry> experience) async {
+    try {
+      await _doc(uid).update({
+        'workExperience': experience.map((entry) => entry.toMap()).toList(),
+        'updatedAt': Timestamp.now(),
+      });
+    } on FirebaseException {
+      throw const NetworkFailure("Couldn't save your work experience — check your internet and try again.");
     }
   }
 

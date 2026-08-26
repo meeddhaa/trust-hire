@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/errors/failure.dart';
 import '../../../core/providers/session_providers.dart';
+import '../../../core/theme/risk_colors.dart';
 import '../../../data/resume_templates.dart';
 import '../../../shared/widgets/expandable_section.dart';
 import '../providers/resume_providers.dart';
@@ -54,6 +55,24 @@ class ResumeScreen extends ConsumerWidget {
       );
   }
 
+  Future<void> _syncSkills(BuildContext context, WidgetRef ref) async {
+    final addedSkills = await ref.read(resumeControllerProvider.notifier).syncSkills();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            addedSkills.isEmpty
+                ? 'Your profile is already up to date with this resume.'
+                : addedSkills.length == 1
+                    ? 'Synced — added "${addedSkills.first}" to your skills.'
+                    : 'Synced — added ${addedSkills.length} skills: ${addedSkills.join(', ')}.',
+          ),
+        ),
+      );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final text = Theme.of(context).textTheme;
@@ -88,29 +107,54 @@ class ResumeScreen extends ConsumerWidget {
             error: (error, _) => Text(error.toString(), style: text.bodyMedium),
             data: (profile) {
               final hasResume = profile?.resumeBase64 != null;
+              final risk = Theme.of(context).extension<RiskColors>()!;
               return Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(
-                        hasResume ? Icons.description : Icons.description_outlined,
-                        color: hasResume ? Theme.of(context).colorScheme.primary : null,
+                      Row(
+                        children: [
+                          Icon(
+                            hasResume ? Icons.description : Icons.description_outlined,
+                            color: hasResume ? Theme.of(context).colorScheme.primary : null,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              hasResume ? 'Resume on file' : 'No resume uploaded yet',
+                              style: text.titleSmall,
+                            ),
+                          ),
+                          if (isBusy)
+                            const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                          else if (hasResume)
+                            TextButton(
+                              onPressed: () => ref.read(resumeControllerProvider.notifier).deleteResume(),
+                              child: const Text('Remove'),
+                            ),
+                        ],
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          hasResume ? 'Resume on file' : 'No resume uploaded yet',
-                          style: text.titleSmall,
+                      if (hasResume && !isBusy) ...[
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Icon(Icons.check_circle, size: 15, color: risk.verifiedLeaning),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Synced to profile',
+                              style: text.labelMedium?.copyWith(color: risk.verifiedLeaning),
+                            ),
+                            const Spacer(),
+                            TextButton.icon(
+                              onPressed: () => _syncSkills(context, ref),
+                              icon: const Icon(Icons.sync, size: 16),
+                              label: const Text('Sync again'),
+                            ),
+                          ],
                         ),
-                      ),
-                      if (isBusy)
-                        const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      else if (hasResume)
-                        TextButton(
-                          onPressed: () => ref.read(resumeControllerProvider.notifier).deleteResume(),
-                          child: const Text('Remove'),
-                        ),
+                      ],
                     ],
                   ),
                 ),

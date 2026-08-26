@@ -13,10 +13,21 @@ interface Env {
 export class GeminiError extends Error {}
 
 /** A minimal subset of the Gemini `responseSchema` (OpenAPI-style) shape —
- * just enough for the two flat schemas this Worker uses. */
+ * just enough for the schemas this Worker uses. Array items can themselves
+ * be an OBJECT (e.g. resume `experience` entries), one level deep only —
+ * nothing here needs more nesting than that yet. */
+interface GeminiJsonSchemaProperty {
+  type: 'STRING' | 'INTEGER' | 'ARRAY' | 'OBJECT';
+  items?: {
+    type: 'STRING' | 'OBJECT';
+    properties?: Record<string, { type: 'STRING' }>;
+    required?: string[];
+  };
+}
+
 export interface GeminiJsonSchema {
   type: 'OBJECT';
-  properties: Record<string, { type: 'STRING' | 'INTEGER' | 'ARRAY'; items?: { type: 'STRING' } }>;
+  properties: Record<string, GeminiJsonSchemaProperty>;
   required: string[];
 }
 

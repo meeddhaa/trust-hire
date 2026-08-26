@@ -3,6 +3,7 @@ import '../../core/errors/failure.dart';
 import '../../core/network/api_client.dart';
 import '../models/job_coach_result.dart';
 import '../models/match_result.dart';
+import '../models/resume_extraction_result.dart';
 import '../models/resume_tailor_result.dart';
 import '../models/scam_assessment.dart';
 import 'firebase_auth_service.dart';
@@ -84,7 +85,7 @@ class WorkerApiService {
   /// Throws [NotFoundFailure] (via [ApiClient]) if no resume is on file —
   /// callers should only invoke this right after a successful upload,
   /// where that shouldn't happen.
-  Future<List<String>> extractResumeSkills({required List<String> existingSkills}) async {
+  Future<ResumeExtractionResult> extractResumeSkills({required List<String> existingSkills}) async {
     final token = await _requireIdToken();
     final response = await _apiClient.postJson(
       WorkerConfig.baseUrl,
@@ -92,6 +93,6 @@ class WorkerApiService {
       bearerToken: token,
       body: {'existingSkills': existingSkills},
     );
-    return List<String>.from(response['skills'] as List? ?? const []);
+    return ResumeExtractionResult.fromJson(response);
   }
 }

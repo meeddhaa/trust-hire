@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/router/main_shell.dart';
+import '../../../core/theme/risk_colors.dart';
 import '../../../data/models/application.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../listing_detail/providers/listing_detail_providers.dart';
@@ -60,11 +61,28 @@ class _ApplicationTile extends ConsumerWidget {
 
   final Application application;
 
+  /// Color-codes the status pill so progress reads at a glance down the
+  /// list, not just from the label text — reusing the same risk-scale
+  /// colors as trust badges for offer/rejected (they're the same
+  /// "good/bad outcome" shape), the brand accent for the in-progress
+  /// "applied" state, and a neutral tone for "interested" (nothing has
+  /// actually happened yet).
+  static (Color, Color) _colorsFor(ApplicationStatus status, RiskColors risk, ColorScheme scheme) {
+    return switch (status) {
+      ApplicationStatus.interested => (scheme.onSurfaceVariant, scheme.surfaceContainerHighest),
+      ApplicationStatus.applied => (scheme.primary, scheme.primary.withValues(alpha: 0.12)),
+      ApplicationStatus.interviewing => (risk.caution, risk.cautionBg),
+      ApplicationStatus.offer => (risk.verifiedLeaning, risk.verifiedLeaningBg),
+      ApplicationStatus.rejected => (risk.highRisk, risk.highRiskBg),
+    };
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final text = Theme.of(context).textTheme;
     final listingAsync = ref.watch(listingByIdProvider(application.listingId));
-    final scheme = Theme.of(context).colorScheme;
+    final risk = Theme.of(context).extension<RiskColors>()!;
+    final (fg, bg) = _colorsFor(application.status, risk, Theme.of(context).colorScheme);
 
     return Card(
       child: ListTile(
@@ -76,13 +94,10 @@ class _ApplicationTile extends ConsumerWidget {
         subtitle: listingAsync.value?.company != null ? Text(listingAsync.value!.company) : null,
         trailing: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(8),
-          ),
+          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
           child: Text(
             ApplicationsScreen._statusLabels[application.status]!,
-            style: text.labelSmall,
+            style: text.labelSmall?.copyWith(color: fg, fontWeight: FontWeight.w600),
           ),
         ),
         onTap: () => context.push('/listings/${application.listingId}'),

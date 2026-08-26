@@ -149,39 +149,95 @@ class _ApplicationStatusRow extends ConsumerWidget {
     ApplicationStatus.rejected: 'Rejected',
   };
 
+  /// Same status → color mapping as the Applications list tile (see
+  /// `applications_screen.dart`'s `_ApplicationTile._colorsFor`) — kept in
+  /// sync manually rather than shared, since pulling it into a common
+  /// widget file for two call sites wasn't worth the indirection yet.
+  static (Color, Color) _colorsFor(ApplicationStatus? status, RiskColors risk, ColorScheme scheme) {
+    return switch (status) {
+      null => (scheme.onSurfaceVariant, scheme.surfaceContainerHighest),
+      ApplicationStatus.interested => (scheme.onSurfaceVariant, scheme.surfaceContainerHighest),
+      ApplicationStatus.applied => (scheme.primary, scheme.primary.withValues(alpha: 0.12)),
+      ApplicationStatus.interviewing => (risk.caution, risk.cautionBg),
+      ApplicationStatus.offer => (risk.verifiedLeaning, risk.verifiedLeaningBg),
+      ApplicationStatus.rejected => (risk.highRisk, risk.highRiskBg),
+    };
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final text = Theme.of(context).textTheme;
     final application = ref.watch(applicationForListingProvider(listingId)).valueOrNull;
     final uid = ref.read(currentUidProvider);
+    final risk = Theme.of(context).extension<RiskColors>()!;
+    final (fg, bg) = _colorsFor(application?.status, risk, Theme.of(context).colorScheme);
 
-    return Row(
-      children: [
-        Text('Track: ', style: text.labelMedium),
-        const SizedBox(width: 4),
-        Expanded(
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<ApplicationStatus?>(
-              isExpanded: true,
-              value: application?.status,
-              hint: const Text('Not tracked'),
-              items: [
-                for (final status in ApplicationStatus.values)
-                  DropdownMenuItem(value: status, child: Text(_labels[status]!)),
-              ],
-              onChanged: uid == null
-                  ? null
-                  : (status) {
-                      if (status == null) return;
-                      ref
-                          .read(applicationRepositoryProvider)
-                          .setStatus(uid: uid, listingId: listingId, status: status);
-                    },
-            ),
+    // A filled, color-coded card rather than an inline text label + small
+    // dropdown arrow — this is the button users reported not noticing at
+    // all, so it needs to read as a primary action, not a footnote.
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: uid == null
+            ? null
+            : () => _showStatusPicker(context, ref, uid, application?.status),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Icon(Icons.flag_outlined, size: 20, color: fg),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Application status', style: text.labelSmall?.copyWith(color: fg)),
+                    const SizedBox(height: 2),
+                    Text(
+                      application == null ? 'Not tracked — tap to add' : _labels[application.status]!,
+                      style: text.titleMedium?.copyWith(color: fg, fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.keyboard_arrow_down_rounded, color: fg),
+            ],
           ),
         ),
-      ],
+      ),
     );
+  }
+
+  Future<void> _showStatusPicker(
+    BuildContext context,
+    WidgetRef ref,
+    String uid,
+    ApplicationStatus? current,
+  ) async {
+    final selected = await showModalBottomSheet<ApplicationStatus>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+              child: Align(alignment: Alignment.centerLeft, child: Text('Track this application')),
+            ),
+            for (final status in ApplicationStatus.values)
+              ListTile(
+                leading: Icon(current == status ? Icons.radio_button_checked : Icons.radio_button_unchecked),
+                title: Text(_labels[status]!),
+                onTap: () => Navigator.pop(sheetContext, status),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null) return;
+    await ref.read(applicationRepositoryProvider).setStatus(uid: uid, listingId: listingId, status: selected);
   }
 }
 

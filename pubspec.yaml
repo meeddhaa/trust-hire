@@ -79,6 +79,13 @@ dependencies:
   # --- Resume PDF selection for upload (Settings > Resume) ---
   file_picker: ^8.1.6
 
+  # --- Profile photo: resize/re-encode picked images down to a small JPEG
+  # thumbnail entirely in Dart (no native platform code) before base64
+  # storage — see "Decision: resume storage, twice reconsidered" in
+  # docs/ARCHITECTURE.md for why anything binary lives in a Firestore field
+  # instead of a file store, and the size discipline that requires.
+  image: ^4.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -53,8 +53,27 @@ export const RESUME_SKILLS_RESPONSE_SCHEMA: GeminiJsonSchema = {
   type: 'OBJECT',
   properties: {
     skills: { type: 'ARRAY', items: { type: 'STRING' } },
+    // Work history, oldest-concern-last (most recent role first) — same
+    // "only what the resume actually shows" grounding rule as the skills
+    // list, see RESUME_SKILLS_SYSTEM_INSTRUCTION below. `duration` is a
+    // free-text string ("Jan 2022 – Present"), not structured start/end
+    // dates — resumes format dates too inconsistently to reliably parse
+    // into real Date values, and a free-text label is all the profile UI
+    // displays anyway.
+    experience: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          title: { type: 'STRING' },
+          company: { type: 'STRING' },
+          duration: { type: 'STRING' },
+        },
+        required: ['title', 'company', 'duration'],
+      },
+    },
   },
-  required: ['skills'],
+  required: ['skills', 'experience'],
 };
 
 const MATCH_SYSTEM_INSTRUCTION = `You are the explainable job-matching engine inside TrustHire, an app \
@@ -124,20 +143,29 @@ export function buildResumeTailorPrompt(listing: JobListingDoc) {
   return { systemInstruction: RESUME_TAILOR_SYSTEM_INSTRUCTION, userPrompt };
 }
 
-const RESUME_SKILLS_SYSTEM_INSTRUCTION = `You extract skills from a resume for TrustHire, an app helping job \
-seekers in Bangladesh. You are given a candidate's resume as an attached \
-document, and optionally a list of skills they've already typed into \
-their profile. Extract a concise list of concrete skills (technologies, \
-tools, languages, frameworks, and named competencies) the resume gives \
-clear EVIDENCE for — from actual experience, projects, or education \
-sections, not aspirational wording or a generic "Skills" section listing \
-things without any supporting evidence elsewhere in the document. Do not \
-invent skills the resume doesn't support. Use standard, specific naming \
-(e.g. "React", not "React.js framework knowledge" or "Frontend \
-development"). Return 5-20 skills, no duplicates, and don't repeat any \
-skill already in the candidate's typed list verbatim — only genuinely \
-new ones the resume reveals. Respond with JSON only, matching the schema \
-exactly, no text outside the JSON.`;
+const RESUME_SKILLS_SYSTEM_INSTRUCTION = `You extract skills and work experience from a resume for TrustHire, an \
+app helping job seekers in Bangladesh. You are given a candidate's resume \
+as an attached document, and optionally a list of skills they've already \
+typed into their profile. Produce two things:
+1. skills: a concise list of concrete skills (technologies, tools, \
+languages, frameworks, and named competencies) the resume gives clear \
+EVIDENCE for — from actual experience, projects, or education sections, \
+not aspirational wording or a generic "Skills" section listing things \
+without any supporting evidence elsewhere in the document. Do not invent \
+skills the resume doesn't support. Use standard, specific naming (e.g. \
+"React", not "React.js framework knowledge" or "Frontend development"). \
+Return 5-20 skills, no duplicates, and don't repeat any skill already in \
+the candidate's typed list verbatim — only genuinely new ones the resume \
+reveals.
+2. experience: every job/internship/role the resume's work-history \
+section actually lists, most recent first — title, company, and duration \
+exactly as the resume states them (a duration like "Jan 2022 – Present" \
+or "2020-2021", verbatim or lightly normalized, never invented). Do not \
+include education entries here, only employment. If the resume has no \
+work history section, return an empty list — do not invent a role to \
+fill it.
+Respond with JSON only, matching the schema exactly, no text outside the \
+JSON.`;
 
 export function buildResumeSkillsPrompt(existingSkills: string[]) {
   const userPrompt = JSON.stringify({ existingSkills });

@@ -75,9 +75,19 @@ export interface JobCoachGeminiResult {
   followUpSuggestions: string[];
 }
 
-/** Gemini's structured response for resume skill extraction — fires once
- * per upload (see `handleExtractResumeSkills`), not cached, no reason to
- * be (a new upload always calls this fresh). */
+/** One job/internship the resume's work-history section actually lists —
+ * see `RESUME_SKILLS_RESPONSE_SCHEMA`'s comment for why `duration` stays
+ * a free-text string instead of structured dates. */
+export interface ResumeExperienceEntry {
+  title: string;
+  company: string;
+  duration: string;
+}
+
+/** Gemini's structured response for resume skill + experience extraction —
+ * fires once per upload (see `handleExtractResumeSkills`), not cached, no
+ * reason to be (a new upload always calls this fresh). */
 export interface ResumeSkillsGeminiResult {
   skills: string[];
+  experience: ResumeExperienceEntry[];
 }
