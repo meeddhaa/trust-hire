@@ -4,10 +4,12 @@ import { callGeminiForJson, GeminiError } from './gemini';
 import {
   buildJobCoachPrompt,
   buildMatchPrompt,
+  buildResumeSkillsPrompt,
   buildResumeTailorPrompt,
   buildScamPrompt,
   JOB_COACH_RESPONSE_SCHEMA,
   MATCH_RESPONSE_SCHEMA,
+  RESUME_SKILLS_RESPONSE_SCHEMA,
   RESUME_TAILOR_RESPONSE_SCHEMA,
   SCAM_RESPONSE_SCHEMA,
 } from './prompts';
@@ -17,6 +19,7 @@ import type {
   JobCoachGeminiResult,
   JobListingDoc,
   MatchGeminiResult,
+  ResumeSkillsGeminiResult,
   ResumeTailorGeminiResult,
   ScamGeminiResult,
   UserProfileDoc,
@@ -229,6 +232,33 @@ async function handleJobCoach(request: Request, env: Env, uid: string): Promise<
   return json(result);
 }
 
+async function handleExtractResumeSkills(request: Request, env: Env, uid: string): Promise<Response> {
+  const body = await request.json<{ existingSkills?: unknown }>().catch(() => null);
+  const existingSkills = Array.isArray(body?.existingSkills)
+    ? body.existingSkills.filter((s): s is string => typeof s === 'string')
+    : [];
+
+  const profile = await getDocument(env, `users/${uid}`);
+  const resumeBase64 = (profile as unknown as UserProfileDoc | null)?.resumeBase64;
+  if (!resumeBase64) return errorResponse(404, 'Upload a resume first');
+
+  const rateLimit = await checkAndConsumeRateLimit(env, uid);
+  if (!rateLimit.allowed) {
+    return errorResponse(429, `Daily AI request limit (${rateLimit.limit}) reached — try again tomorrow`);
+  }
+
+  const { systemInstruction, userPrompt } = buildResumeSkillsPrompt(existingSkills);
+  const result = await callGeminiForJson<ResumeSkillsGeminiResult>(
+    env,
+    systemInstruction,
+    userPrompt,
+    RESUME_SKILLS_RESPONSE_SCHEMA,
+    [{ mimeType: 'application/pdf', base64Data: resumeBase64 }],
+  );
+
+  return json(result);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -248,6 +278,7 @@ export default {
       if (url.pathname === '/v1/scam-assessment') return await handleScamAssessment(request, env, uid);
       if (url.pathname === '/v1/resume-tailor') return await handleResumeTailor(request, env, uid);
       if (url.pathname === '/v1/job-coach') return await handleJobCoach(request, env, uid);
+      if (url.pathname === '/v1/resume-skills') return await handleExtractResumeSkills(request, env, uid);
       return errorResponse(404, 'Unknown endpoint');
     } catch (err) {
       if (err instanceof AuthError) return errorResponse(401, err.message);

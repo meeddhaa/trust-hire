@@ -74,3 +74,10 @@ export interface JobCoachGeminiResult {
   answer: string;
   followUpSuggestions: string[];
 }
+
+/** Gemini's structured response for resume skill extraction — fires once
+ * per upload (see `handleExtractResumeSkills`), not cached, no reason to
+ * be (a new upload always calls this fresh). */
+export interface ResumeSkillsGeminiResult {
+  skills: string[];
+}

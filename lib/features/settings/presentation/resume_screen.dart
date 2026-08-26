@@ -39,7 +39,19 @@ class ResumeScreen extends ConsumerWidget {
       return;
     }
 
-    await ref.read(resumeControllerProvider.notifier).uploadResume(file.bytes!);
+    final addedSkills = await ref.read(resumeControllerProvider.notifier).uploadResume(file.bytes!);
+    if (!context.mounted || addedSkills.isEmpty) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            addedSkills.length == 1
+                ? 'Resume uploaded — added "${addedSkills.first}" to your skills.'
+                : 'Resume uploaded — added ${addedSkills.length} skills: ${addedSkills.join(', ')}.',
+          ),
+        ),
+      );
   }
 
   @override
@@ -65,8 +77,9 @@ class ResumeScreen extends ConsumerWidget {
         padding: const EdgeInsets.all(20),
         children: [
           Text(
-            'Uploading a resume lets match scoring and the tailoring suggestions on a '
-            "listing draw on your actual experience, not just the skills you typed in.",
+            'Uploading a resume automatically pulls skills from it into your profile, '
+            'and lets match scoring and tailoring suggestions on a listing draw on your '
+            'actual experience, not just what you typed in.',
             style: text.bodyMedium,
           ),
           const SizedBox(height: 20),

@@ -76,6 +76,34 @@ class ProfileRepository {
     }
   }
 
+  /// Adds [newSkills] to the profile's existing skill list, case-insensitive
+  /// deduped against what's already there — used right after a resume
+  /// upload (see `ResumeController.uploadResume`) to fold in whatever the
+  /// Gemini extraction call found. Returns the skills actually added (a
+  /// subset of [newSkills], with duplicates removed) so the caller can
+  /// tell the user something concrete ("added 4 skills"), not just "done."
+  Future<List<String>> addSkills(String uid, List<String> newSkills) async {
+    try {
+      final snapshot = await _doc(uid).get();
+      final existing = List<String>.from(snapshot.data()?['skills'] as List? ?? const []);
+      final existingLower = existing.map((s) => s.toLowerCase()).toSet();
+
+      final toAdd = <String>[];
+      for (final skill in newSkills) {
+        if (existingLower.add(skill.toLowerCase())) toAdd.add(skill);
+      }
+      if (toAdd.isEmpty) return const [];
+
+      await _doc(uid).update({
+        'skills': [...existing, ...toAdd],
+        'updatedAt': Timestamp.now(),
+      });
+      return toAdd;
+    } on FirebaseException {
+      throw const NetworkFailure("Couldn't update your skills — check your internet and try again.");
+    }
+  }
+
   /// Used by account deletion — removes the `users/{uid}` doc itself.
   /// Called after applications/saved jobs/resume are already cleaned up
   /// (see `AccountController.deleteAccount`), and before the Auth account

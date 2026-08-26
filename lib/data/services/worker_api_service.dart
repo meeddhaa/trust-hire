@@ -80,4 +80,18 @@ class WorkerApiService {
     );
     return JobCoachResult.fromJson(response);
   }
+
+  /// Throws [NotFoundFailure] (via [ApiClient]) if no resume is on file —
+  /// callers should only invoke this right after a successful upload,
+  /// where that shouldn't happen.
+  Future<List<String>> extractResumeSkills({required List<String> existingSkills}) async {
+    final token = await _requireIdToken();
+    final response = await _apiClient.postJson(
+      WorkerConfig.baseUrl,
+      WorkerConfig.resumeSkillsPath,
+      bearerToken: token,
+      body: {'existingSkills': existingSkills},
+    );
+    return List<String>.from(response['skills'] as List? ?? const []);
+  }
 }

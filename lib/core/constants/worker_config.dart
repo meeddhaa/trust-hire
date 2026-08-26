@@ -9,6 +9,7 @@ abstract final class WorkerConfig {
   static const String scamAssessmentPath = '/v1/scam-assessment';
   static const String resumeTailorPath = '/v1/resume-tailor';
   static const String jobCoachPath = '/v1/job-coach';
+  static const String resumeSkillsPath = '/v1/resume-skills';
 
   /// Mirrors the Worker's `MATCH_MODEL_VERSION`/`SCAM_MODEL_VERSION` vars.
   /// Used client-side only to decide whether a Firestore-cached result is

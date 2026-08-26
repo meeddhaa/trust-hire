@@ -36,17 +36,33 @@ service cloud.firestore {
     // --- Applications: user's own tracked status per listing (interested/
     // applied/interviewing/offer/rejected) — self-reported, not verified by
     // anything, so client-owned is fine (unlike matchResults/scamAssessments,
-    // there's no "forging a verdict" risk here). `request.resource` is null
-    // on delete, so create is checked separately from update/delete (which
-    // check the *existing* doc's owner instead).
+    // there's no "forging a verdict" risk here). `create` is checked
+    // separately from `update`/`delete` (which check the *existing* doc's
+    // owner instead) because `request.resource` — not `resource` — is what's
+    // populated on create.
+    //
+    // `read` allows `resource == null` deliberately: a `get()`/`snapshots()`
+    // listen on a path with no document yet still runs the `read` rule
+    // (that's how a client is told "not found" rather than being denied
+    // outright), and at that point `resource` itself is null — evaluating
+    // `resource.data.userId` on a null `resource` is a rules *error*, which
+    // Firestore treats as a hard deny, not a graceful "no data". Real bug
+    // this caused, not a hypothetical: `ApplicationRepository.setStatus`
+    // does a `.get()` first (to preserve `createdAt` on updates), which hit
+    // exactly this on any listing never tracked before — everyone's very
+    // first "Track" attempt silently failed with PERMISSION_DENIED.
     match /applications/{applicationId} {
-      allow read, update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow read: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
+      allow update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
     }
 
-    // --- Saved jobs: user's own bookmarks ---
+    // --- Saved jobs: user's own bookmarks --- Same `resource == null` fix
+    // as `applications`, for the same reason (the save-toggle's existence
+    // check hits an as-yet-nonexistent document just as often).
     match /savedJobs/{savedJobId} {
-      allow read, update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow read: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
+      allow update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
     }
 
@@ -59,8 +75,16 @@ service cloud.firestore {
 
     // --- Match results: per (user, listing) explainable match output ---
     // Cached by the Worker after a Gemini call. Client reads its own only.
+    // `resource == null` guard: same reasoning as `applications`/`savedJobs`
+    // above — `MatchRepository`'s cache-check reads this doc before the
+    // Worker has ever computed it for a given listing, and a null `resource`
+    // makes `resource.data.userId` a rules error, not a clean "not found".
+    // Masked here (unlike applications/savedJobs) by a defensive try/catch
+    // in `match_repository.dart` that treats any read failure as a cache
+    // miss — harmless in effect, but worth fixing at the source rather than
+    // relying on that catch to paper over a genuine rules bug.
     match /matchResults/{matchId} {
-      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow read: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
       allow write: if false;
     }
 

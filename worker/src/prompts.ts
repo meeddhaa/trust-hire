@@ -49,6 +49,14 @@ export const JOB_COACH_RESPONSE_SCHEMA: GeminiJsonSchema = {
   required: ['answer', 'followUpSuggestions'],
 };
 
+export const RESUME_SKILLS_RESPONSE_SCHEMA: GeminiJsonSchema = {
+  type: 'OBJECT',
+  properties: {
+    skills: { type: 'ARRAY', items: { type: 'STRING' } },
+  },
+  required: ['skills'],
+};
+
 const MATCH_SYSTEM_INSTRUCTION = `You are the explainable job-matching engine inside TrustHire, an app \
 helping job seekers in Bangladesh evaluate listings. Given a candidate's \
 profile and a job listing, you must:
@@ -114,6 +122,26 @@ export function buildResumeTailorPrompt(listing: JobListingDoc) {
     },
   });
   return { systemInstruction: RESUME_TAILOR_SYSTEM_INSTRUCTION, userPrompt };
+}
+
+const RESUME_SKILLS_SYSTEM_INSTRUCTION = `You extract skills from a resume for TrustHire, an app helping job \
+seekers in Bangladesh. You are given a candidate's resume as an attached \
+document, and optionally a list of skills they've already typed into \
+their profile. Extract a concise list of concrete skills (technologies, \
+tools, languages, frameworks, and named competencies) the resume gives \
+clear EVIDENCE for — from actual experience, projects, or education \
+sections, not aspirational wording or a generic "Skills" section listing \
+things without any supporting evidence elsewhere in the document. Do not \
+invent skills the resume doesn't support. Use standard, specific naming \
+(e.g. "React", not "React.js framework knowledge" or "Frontend \
+development"). Return 5-20 skills, no duplicates, and don't repeat any \
+skill already in the candidate's typed list verbatim — only genuinely \
+new ones the resume reveals. Respond with JSON only, matching the schema \
+exactly, no text outside the JSON.`;
+
+export function buildResumeSkillsPrompt(existingSkills: string[]) {
+  const userPrompt = JSON.stringify({ existingSkills });
+  return { systemInstruction: RESUME_SKILLS_SYSTEM_INSTRUCTION, userPrompt };
 }
 
 const JOB_COACH_SYSTEM_INSTRUCTION = `You are the "Job Coach" inside TrustHire, a career-focused assistant for \
