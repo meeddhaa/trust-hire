@@ -178,16 +178,52 @@ class _JobCoachAnswer extends StatelessWidget {
               const SizedBox(height: 16),
               Text('Ask next', style: text.labelMedium),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final followUp in followUps)
-                    ActionChip(label: Text(followUp), onPressed: () => onFollowUp(followUp)),
-                ],
-              ),
+              // A vertical list of full-width rows, not a Wrap of Chips —
+              // Chip is built for short tags, and clips its label at its
+              // own shape boundary with no wrap/ellipsis once the text is
+              // long. Follow-up suggestions are full questions, so they
+              // need a widget that actually wraps multi-line text (caught
+              // live: the reference's real follow-ups clipped mid-word
+              // with a Wrap of ActionChips).
+              for (final followUp in followUps)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _FollowUpRow(question: followUp, onTap: () => onFollowUp(followUp)),
+                ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FollowUpRow extends StatelessWidget {
+  const _FollowUpRow({required this.question, required this.onTap});
+
+  final String question;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    return Material(
+      color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: Text(question, style: text.bodyMedium)),
+              const SizedBox(width: 8),
+              Icon(Icons.arrow_outward_rounded, size: 16, color: scheme.primary),
+            ],
+          ),
         ),
       ),
     );
