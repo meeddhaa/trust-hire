@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/providers/repository_providers.dart';
-import '../../../core/router/main_shell.dart';
 import '../../../core/providers/session_providers.dart';
 import '../../../data/models/saved_job.dart';
 import '../../../shared/widgets/company_avatar.dart';
@@ -10,6 +9,9 @@ import '../../../shared/widgets/empty_state.dart';
 import '../../listing_detail/providers/listing_detail_providers.dart';
 import '../providers/saved_jobs_providers.dart';
 
+/// Reached via the drawer, not a bottom-nav tab — pushed on top with a
+/// normal back button (default AppBar leading), same pattern as Resume/
+/// Settings/Subscription. See `app_drawer.dart`'s doc comment for why.
 class SavedJobsScreen extends ConsumerWidget {
   const SavedJobsScreen({super.key});
 
@@ -18,7 +20,7 @@ class SavedJobsScreen extends ConsumerWidget {
     final savedAsync = ref.watch(savedJobsStreamProvider);
 
     return Scaffold(
-      appBar: AppBar(leading: buildDrawerButton(context), title: const Text('Saved')),
+      appBar: AppBar(title: const Text('Saved')),
       body: savedAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => EmptyState(

@@ -5,11 +5,14 @@ import '../../features/auth/providers/auth_providers.dart';
 import '../providers/session_providers.dart';
 
 /// Account management, separate from the primary bottom-nav destinations
-/// (Jobs/Applications/Saved/Job Coach/Profile) — per the decision to keep
-/// "core product" and "account" navigation from mixing (see
+/// (Dashboard/Jobs/Applications/Job Coach/Profile) — per the decision to
+/// keep "core product" and "account" navigation from mixing (see
 /// docs/ARCHITECTURE.md → "Decision: navigation drawer"). Doesn't repeat
 /// Profile — that already has its own bottom-nav tab, so listing it here
 /// too would just be the same destination reachable two confusing ways.
+/// Saved lives here rather than as a bottom-nav tab: six tabs overflowed
+/// the floating nav bar on real device widths, and Saved was the one
+/// asked to move.
 class AppDrawer extends ConsumerWidget {
   const AppDrawer({super.key});
 
@@ -34,6 +37,14 @@ class AppDrawer extends ConsumerWidget {
               ),
             ),
             const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.bookmark_border_rounded),
+              title: const Text('Saved'),
+              onTap: () {
+                Navigator.of(context).pop();
+                context.push('/saved');
+              },
+            ),
             ListTile(
               leading: const Icon(Icons.description_outlined),
               title: const Text('Resume'),

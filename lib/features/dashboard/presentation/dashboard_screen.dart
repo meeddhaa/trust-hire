@@ -64,7 +64,9 @@ class DashboardScreen extends ConsumerWidget {
                   icon: Icons.bookmark_border_rounded,
                   value: savedCount == null ? '—' : '$savedCount',
                   label: 'Saved',
-                  onTap: () => context.go('/saved'),
+                  // push, not go — Saved is reached via the drawer now,
+                  // not a shell branch (see app_drawer.dart's doc comment).
+                  onTap: () => context.push('/saved'),
                 ),
               ),
               const SizedBox(width: 12),
