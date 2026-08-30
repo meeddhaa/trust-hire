@@ -2,21 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'app_drawer.dart';
 
-/// The primary product surface: Jobs / Applications / Saved / Job Coach /
-/// Profile as bottom-nav tabs, each keeping its own navigation stack (so
-/// pushing a listing detail from Jobs doesn't disturb the other tabs) via
-/// go_router's `StatefulShellRoute.indexedStack`. The account drawer
-/// (Resume/Settings/Subscription/Sign out) lives one level up from all of
-/// them — see `app_drawer.dart`'s doc comment for why that split exists.
+/// The primary product surface: Dashboard / Jobs / Applications / Job
+/// Coach / Profile as bottom-nav tabs, each keeping its own navigation
+/// stack (so pushing a listing detail from Jobs doesn't disturb the other
+/// tabs) via go_router's `StatefulShellRoute.indexedStack`. Dashboard is
+/// the real landing tab; Jobs is a pure listings browser, not a second
+/// home screen. Saved lives in the account drawer instead of as a sixth
+/// tab — six tabs overflowed this floating nav bar on real device widths
+/// — alongside Resume/Settings/Subscription/Sign out; see
+/// `app_drawer.dart`'s doc comment for why that split exists.
 class MainShell extends StatelessWidget {
   const MainShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
   static const _destinations = [
+    (Icons.dashboard_outlined, Icons.dashboard_rounded, 'Dashboard'),
     (Icons.work_outline_rounded, Icons.work_rounded, 'Jobs'),
     (Icons.assignment_outlined, Icons.assignment_rounded, 'Applications'),
-    (Icons.bookmark_border_rounded, Icons.bookmark_rounded, 'Saved'),
     (Icons.school_outlined, Icons.school_rounded, 'Job Coach'),
     (Icons.person_outline_rounded, Icons.person_rounded, 'Profile'),
   ];
@@ -67,25 +70,35 @@ class _FloatingNavBar extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     return SafeArea(
-      minimum: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      minimum: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       child: Container(
         height: 64,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 6),
         decoration: BoxDecoration(
           color: scheme.surface,
           borderRadius: BorderRadius.circular(32),
           border: Border.all(color: scheme.outline),
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
             for (var i = 0; i < destinations.length; i++)
-              _NavIcon(
-                outlineIcon: destinations[i].$1,
-                filledIcon: destinations[i].$2,
-                label: destinations[i].$3,
-                selected: i == currentIndex,
-                onTap: () => onDestinationSelected(i),
+              // Expanded, not spaceEvenly — with six tabs (five icon-only
+              // circles plus one wider icon+label pill for the active
+              // tab), spaceEvenly's natural-width children genuinely
+              // overflowed the bar on real device widths (caught live: a
+              // visible "RIGHT OVERFLOWED BY 24 PIXELS" strip, Profile's
+              // tab pushed fully off-screen). Giving each tab an equal
+              // Expanded share and letting `_NavIcon` shrink its own
+              // content with a FittedBox means it degrades gracefully on
+              // any width instead of hard-overflowing.
+              Expanded(
+                child: _NavIcon(
+                  outlineIcon: destinations[i].$1,
+                  filledIcon: destinations[i].$2,
+                  label: destinations[i].$3,
+                  selected: i == currentIndex,
+                  onTap: () => onDestinationSelected(i),
+                ),
               ),
           ],
         ),
@@ -118,31 +131,41 @@ class _NavIcon extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(24),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-          height: 46,
-          padding: EdgeInsets.symmetric(horizontal: selected ? 16 : 11),
-          decoration: BoxDecoration(
-            color: selected ? scheme.primary : Colors.transparent,
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                selected ? filledIcon : outlineIcon,
-                color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
-                size: 21,
+        child: Center(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            height: 46,
+            padding: EdgeInsets.symmetric(horizontal: selected ? 14 : 11),
+            decoration: BoxDecoration(
+              color: selected ? scheme.primary : Colors.transparent,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            // FittedBox so this shrinks to fit its Expanded slot instead
+            // of overflowing it — the active pill (icon + label) is
+            // meaningfully wider than the five icon-only circles, and six
+            // equal Expanded shares don't always leave it enough natural
+            // width, especially on narrower phones.
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    selected ? filledIcon : outlineIcon,
+                    color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
+                    size: 21,
+                  ),
+                  if (selected) ...[
+                    const SizedBox(width: 6),
+                    Text(
+                      label,
+                      style: text.labelMedium?.copyWith(color: scheme.onPrimary, fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ],
               ),
-              if (selected) ...[
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: text.labelMedium?.copyWith(color: scheme.onPrimary, fontWeight: FontWeight.w700),
-                ),
-              ],
-            ],
+            ),
           ),
         ),
       ),

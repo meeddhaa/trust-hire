@@ -1,8 +1,6 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/providers/session_providers.dart';
 import '../../../core/router/main_shell.dart';
 import '../../../core/theme/risk_colors.dart';
 import '../../../data/models/scam_assessment.dart';
@@ -11,15 +9,12 @@ import '../../../shared/widgets/trust_badge_chip.dart';
 import '../providers/listings_providers.dart';
 import 'widgets/job_listing_card.dart';
 
+/// A pure listings browser — search, filters, cards. The personalized
+/// "home" greeting used to live here but now belongs to the Dashboard tab
+/// (see `dashboard_screen.dart`); Jobs doing double duty as both home and
+/// browser was explicit feedback to fix, not a stylistic preference.
 class ListingsFeedScreen extends ConsumerWidget {
   const ListingsFeedScreen({super.key});
-
-  static String _greeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -28,22 +23,15 @@ class ListingsFeedScreen extends ConsumerWidget {
     // stat like the reference's "3.2k impressions" (nothing in this app's
     // data model supports that), just what's actually in the feed.
     final totalListings = ref.watch(listingsStreamProvider).valueOrNull?.length;
-    final profile = ref.watch(currentProfileProvider).valueOrNull;
-    final displayName = profile?.displayName ?? '';
-    final firstName = displayName.trim().isEmpty ? null : displayName.trim().split(' ').first;
 
     return Scaffold(
-      // No "TrustHire" title banner — the greeting header below takes
-      // over that role, matching the reference's app-name-free top bar.
-      appBar: AppBar(leading: buildDrawerButton(context)),
+      appBar: AppBar(
+        leading: buildDrawerButton(context),
+        title: const Text('Jobs'),
+      ),
       body: Column(
         children: [
-          _GreetingHeader(
-            greeting: _greeting(),
-            firstName: firstName,
-            totalListings: totalListings,
-            photoBase64: profile?.photoBase64,
-          ),
+          _CountHeader(totalListings: totalListings),
           const _SearchField(),
           const _FilterBar(),
           Expanded(
@@ -87,21 +75,12 @@ class ListingsFeedScreen extends ConsumerWidget {
 }
 
 /// A warm, personal opener — borrowed structurally from the reference's
-/// "avatar + Good morning [name] / Let's Find Your Next Job" header, with
-/// a real subtitle count of what's actually in the feed rather than the
-/// reference's fabricated engagement stat.
-class _GreetingHeader extends StatelessWidget {
-  const _GreetingHeader({
-    required this.greeting,
-    required this.firstName,
-    required this.totalListings,
-    required this.photoBase64,
-  });
+/// Just the real listing count — the personalized greeting moved to the
+/// Dashboard tab (see this file's class doc comment).
+class _CountHeader extends StatelessWidget {
+  const _CountHeader({required this.totalListings});
 
-  final String greeting;
-  final String? firstName;
   final int? totalListings;
-  final String? photoBase64;
 
   @override
   Widget build(BuildContext context) {
@@ -112,33 +91,8 @@ class _GreetingHeader extends StatelessWidget {
         : '$totalListings listing${totalListings == 1 ? '' : 's'} to explore';
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: scheme.surfaceContainerHighest,
-                backgroundImage: photoBase64 != null ? MemoryImage(base64Decode(photoBase64!)) : null,
-                child: photoBase64 == null
-                    ? Icon(Icons.person_outline, size: 18, color: scheme.onSurfaceVariant)
-                    : null,
-              ),
-              const SizedBox(width: 10),
-              Text(
-                firstName == null ? greeting : '$greeting, $firstName',
-                style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text("Let's find your\nnext job", style: text.headlineLarge),
-          const SizedBox(height: 4),
-          Text(subtitle, style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
-        ],
-      ),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+      child: Text(subtitle, style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
     );
   }
 }

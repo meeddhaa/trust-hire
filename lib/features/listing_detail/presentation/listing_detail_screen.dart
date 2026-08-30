@@ -6,6 +6,7 @@ import '../../../core/errors/failure.dart';
 import '../../../core/providers/repository_providers.dart';
 import '../../../core/providers/session_providers.dart';
 import '../../../core/theme/risk_colors.dart';
+import '../../../core/utils/description_cleaner.dart';
 import '../../../data/models/application.dart';
 import '../../../data/models/job_listing.dart';
 import '../../../data/models/match_result.dart';
@@ -631,7 +632,7 @@ class _MoreDetailsCard extends StatelessWidget {
         child: ExpandableSection(
           title: 'Job description',
           initiallyExpanded: true,
-          child: Text(listing.description, style: text.bodyMedium),
+          child: Text(DescriptionCleaner.clean(listing.description, listing.company), style: text.bodyMedium),
         ),
       ),
     );

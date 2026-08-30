@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/applications/presentation/applications_screen.dart';
 import '../../features/auth/presentation/sign_in_screen.dart';
 import '../../features/auth/providers/auth_providers.dart';
+import '../../features/dashboard/presentation/dashboard_screen.dart';
 import '../../features/job_coach/presentation/job_coach_screen.dart';
 import '../../features/listing_detail/presentation/listing_detail_screen.dart';
 import '../../features/listings/presentation/listings_feed_screen.dart';
@@ -25,14 +26,19 @@ import '../providers/session_providers.dart';
 /// recreating the `GoRouter` instance itself (which would blow away the
 /// navigation stack on every auth change).
 ///
-/// Primary navigation is a `StatefulShellRoute` (Jobs / Applications /
-/// Saved / Job Coach / Profile), each branch keeping its own stack — so
-/// pushing a listing detail from Jobs doesn't disturb Applications'
-/// scroll position, and switching tabs doesn't lose either. Account
-/// management (Resume/Settings/Subscription/Sign out) lives outside the
-/// shell entirely, reached via the drawer — see `app_drawer.dart` and
-/// docs/ARCHITECTURE.md → "Decision: navigation drawer" for why the two
-/// are kept apart.
+/// Primary navigation is a `StatefulShellRoute` (Dashboard / Jobs /
+/// Applications / Job Coach / Profile), each branch keeping its own
+/// stack — so pushing a listing detail from Jobs doesn't disturb
+/// Applications' scroll position, and switching tabs doesn't lose either.
+/// Dashboard is the actual landing screen (real stats + quick actions);
+/// Jobs stays a pure listings browser rather than doing double duty as
+/// home, per explicit feedback. Saved isn't a bottom-nav tab — six tabs
+/// overflowed the floating nav bar on real device widths, and Saved was
+/// the one asked to move — it lives in the drawer instead, alongside
+/// Resume/Settings/Subscription. Account management (that same group)
+/// lives outside the shell entirely, reached via the drawer — see
+/// `app_drawer.dart` and docs/ARCHITECTURE.md → "Decision: navigation
+/// drawer" for why the two are kept apart.
 final goRouterProvider = Provider<GoRouter>((ref) {
   final refreshNotifier = _RouterRefreshNotifier(ref);
 
@@ -50,14 +56,16 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         branches: [
           StatefulShellBranch(
             routes: [
+              GoRoute(path: '/dashboard', builder: (context, state) => const DashboardScreen()),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
               GoRoute(path: '/listings', builder: (context, state) => const ListingsFeedScreen()),
             ],
           ),
           StatefulShellBranch(routes: [
             GoRoute(path: '/applications', builder: (context, state) => const ApplicationsScreen()),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(path: '/saved', builder: (context, state) => const SavedJobsScreen()),
           ]),
           StatefulShellBranch(
             routes: [
@@ -88,6 +96,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => ListingDetailScreen(listingId: state.pathParameters['id']!),
       ),
 
+      // Saved jobs — outside the shell, reached via the drawer (see this
+      // file's top doc comment for why it isn't a bottom-nav tab).
+      GoRoute(path: '/saved', builder: (context, state) => const SavedJobsScreen()),
+
       // Account management — outside the shell, pushed on top with a
       // normal back button, reached via the drawer.
       GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
@@ -114,7 +126,7 @@ String? _redirect(Ref ref, GoRouterState state) {
   final onOnboarding = state.matchedLocation == '/onboarding';
 
   if (!onboardingComplete) return onOnboarding ? null : '/onboarding';
-  if (onSignIn || onOnboarding || state.matchedLocation == '/') return '/listings';
+  if (onSignIn || onOnboarding || state.matchedLocation == '/') return '/dashboard';
 
   return null;
 }
