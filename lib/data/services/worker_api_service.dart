@@ -75,8 +75,8 @@ class WorkerApiService {
       bearerToken: token,
       body: {
         'intent': intent,
-        if (listingId != null) 'listingId': listingId,
-        if (question != null) 'question': question,
+        'listingId': ?listingId,
+        'question': ?question,
       },
     );
     return JobCoachResult.fromJson(response);
