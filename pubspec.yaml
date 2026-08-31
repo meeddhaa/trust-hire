@@ -97,6 +97,22 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
 
+  # --- App launcher icon generation (see `flutter_launcher_icons:` config
+  # below) — dev-only, doesn't ship in the built app itself.
+  flutter_launcher_icons: ^0.14.3
+
+# App icon: the laptop/"JOB" glyph from the TrustHire logo, cropped to a
+# square and re-processed into two source images (see
+# `assets/icon/README.md` for exactly how) rather than using the full
+# wordmark banner — a launcher icon needs to read as a mark at ~48px,
+# where "Trust Hire / Get. Hired." text would be illegible.
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: assets/icon/icon_base.png
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: assets/icon/icon_foreground.png
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
