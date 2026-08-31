@@ -34,6 +34,20 @@ class UserProfile extends Equatable {
   final String displayName;
   final String email;
 
+  /// A name-like label for screens that shouldn't show a raw email
+  /// address as if it were a name — [displayName] when the user (or
+  /// their Google/email-password sign-in) actually has one, otherwise a
+  /// friendly name derived from the email's own local part (e.g.
+  /// "naafisa.medha@gmail.com" -> "Naafisa Medha") rather than the bare
+  /// address itself.
+  String get friendlyUsername {
+    if (displayName.isNotEmpty) return displayName;
+    final localPart = email.split('@').first;
+    final words = localPart.split(RegExp(r'[._\-]+')).where((w) => w.isNotEmpty);
+    if (words.isEmpty) return email;
+    return words.map((w) => w[0].toUpperCase() + w.substring(1)).join(' ');
+  }
+
   /// Short self-description shown on the profile screen (e.g. "Backend
   /// developer, 3 yrs, fintech"). Optional — not required to reach the feed.
   final String? headline;

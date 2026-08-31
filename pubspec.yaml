@@ -129,6 +129,7 @@ flutter:
   # a judged demo that may run on unpredictable venue wifi.
   assets:
     - assets/fonts/OFL.txt
+    - assets/icon/icon_base.png
 
   # "Editorial Trust" type system: Fraunces (serif, variable) carries the
   # match-score numerals and verdict headlines; Manrope (grotesk, variable)

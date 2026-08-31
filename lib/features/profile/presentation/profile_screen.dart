@@ -40,7 +40,7 @@ class ProfileScreen extends ConsumerWidget {
                 _AvatarEditor(profile: profile),
                 const SizedBox(height: 16),
                 Text(
-                  profile.displayName.isEmpty ? profile.email : profile.displayName,
+                  profile.friendlyUsername,
                   style: text.headlineSmall,
                   textAlign: TextAlign.center,
                 ),

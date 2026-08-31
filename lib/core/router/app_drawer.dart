@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/providers/auth_providers.dart';
-import '../providers/session_providers.dart';
 
 /// Account management, separate from the primary bottom-nav destinations
 /// (Dashboard/Jobs/Applications/Job Coach/Profile) — per the decision to
@@ -19,21 +18,25 @@ class AppDrawer extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final text = Theme.of(context).textTheme;
-    final profile = ref.watch(currentProfileProvider).valueOrNull;
 
     return Drawer(
       child: SafeArea(
         child: Column(
           children: [
+            // Brand header — not the user's own identity (that's what
+            // Profile is for, one tab over) — just "which app is this
+            // drawer for," same role a wordmark plays in most apps' nav.
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  profile?.displayName.isNotEmpty == true ? profile!.displayName : (profile?.email ?? ''),
-                  style: text.titleMedium,
-                  overflow: TextOverflow.ellipsis,
-                ),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.asset('assets/icon/icon_base.png', width: 36, height: 36),
+                  ),
+                  const SizedBox(width: 12),
+                  Text('Trust Hire', style: text.titleMedium),
+                ],
               ),
             ),
             const Divider(height: 1),
