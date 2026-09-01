@@ -2,207 +2,151 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/repository_providers.dart';
 import '../../../core/providers/session_providers.dart';
-import '../../../core/theme/app_motion.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/utils/bd_phone.dart';
 import 'appspro_checkout_screen.dart';
 
-/// Tier comparison + subscribe CTA. Tapping "Subscribe via bdapps" opens
-/// AppsPro's hosted checkout (OTP-verified BD phone subscription) — see
-/// `appspro_checkout_screen.dart` and `worker/src/appspro.ts` for the two
-/// halves of that flow. A phone number is collected first if the profile
-/// doesn't have one yet: it's the only join key AppsPro's webhook can
-/// hand back (see `UserProfile.phoneNumber`'s doc comment), so checkout
-/// can't proceed without it.
-class PaywallScreen extends ConsumerWidget {
+/// Subscribe screen — deliberately just phone number in, OTP checkout out,
+/// matching AppsPro's own hosted-checkout pages (see the "Notes CT"
+/// reference screenshot): icon, one line of copy, a phone field, one
+/// button, the price disclaimer, done. No tier comparison — there's only
+/// one tier, priced entirely on AppsPro's side (see its Pricing tab).
+///
+/// A phone number is collected here (or reused from the profile if already
+/// set) because it's the only join key AppsPro's webhook can hand back —
+/// see `UserProfile.phoneNumber`'s doc comment and `worker/src/appspro.ts`.
+class PaywallScreen extends ConsumerStatefulWidget {
   const PaywallScreen({super.key});
 
-  Future<void> _subscribe(BuildContext context, WidgetRef ref) async {
+  @override
+  ConsumerState<PaywallScreen> createState() => _PaywallScreenState();
+}
+
+class _PaywallScreenState extends ConsumerState<PaywallScreen> {
+  final _phoneController = TextEditingController();
+  String? _errorText;
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final existingPhone = ref.read(currentProfileProvider).valueOrNull?.phoneNumber;
+    if (existingPhone != null) _phoneController.text = existingPhone;
+  }
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _subscribe() async {
     final uid = ref.read(currentUidProvider);
     if (uid == null) return;
-    final existingPhone = ref.read(currentProfileProvider).valueOrNull?.phoneNumber;
-
-    if (existingPhone == null) {
-      final phone = await _promptForPhone(context);
-      if (phone == null) return;
-      if (!context.mounted) return;
-      try {
-        await ref.read(profileRepositoryProvider).setPhoneNumber(uid, phone);
-      } catch (e) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text('$e')));
-        return;
-      }
+    final value = _phoneController.text.trim();
+    if (!isPlausibleBdPhoneNumber(value)) {
+      setState(() => _errorText = "That doesn't look like a valid Robi or Airtel number.");
+      return;
     }
 
-    if (!context.mounted) return;
+    setState(() {
+      _errorText = null;
+      _submitting = true;
+    });
+    try {
+      await ref.read(profileRepositoryProvider).setPhoneNumber(uid, value);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('$e')));
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _submitting = false);
+
     final subscribed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => const AppsProCheckoutScreen()),
     );
-    if (subscribed == true && context.mounted) {
+    if (subscribed == true && mounted) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(const SnackBar(content: Text("You're subscribed! It may take a moment to reflect here.")));
     }
   }
 
-  Future<String?> _promptForPhone(BuildContext context) async {
-    final controller = TextEditingController();
-    String? errorText;
-    return showDialog<String>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setState) => AlertDialog(
-          title: const Text('Your phone number'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Needed for bdapps direct carrier billing — one Bangladeshi mobile number per subscription.'),
-              const SizedBox(height: 12),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                keyboardType: TextInputType.phone,
-                decoration: InputDecoration(hintText: '01XXXXXXXXX', errorText: errorText),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-            TextButton(
-              onPressed: () {
-                final value = controller.text.trim();
-                if (!isPlausibleBdPhoneNumber(value)) {
-                  setState(() => errorText = "That doesn't look like a valid Bangladeshi mobile number.");
-                  return;
-                }
-                Navigator.pop(dialogContext, value);
-              },
-              child: const Text('Continue'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final text = Theme.of(context).textTheme;
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('TrustHire Plus')),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-              children: [
-                Text('See the full picture', style: text.headlineMedium)
-                    .animate()
-                    .fadeIn(duration: AppMotion.standard)
-                    .slideY(begin: 0.1, end: 0, curve: AppMotion.settle),
-                const SizedBox(height: 6),
-                Text(
-                  'Free shows you the score. Plus shows you why — and what to do about it.',
-                  style: text.bodyLarge,
-                ),
-                const SizedBox(height: 28),
-
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: _TierCard(
-                      title: 'Free',
-                      price: '৳0',
-                      features: const ['Match percentage', 'Trust badge', 'Rule-based risk flags'],
-                      highlighted: false,
-                    )),
-                    const SizedBox(width: 12),
-                    Expanded(child: _TierCard(
-                      title: 'Plus',
-                      price: '৳149/mo',
-                      features: const [
-                        'Everything in Free',
-                        'Full gap breakdown',
-                        'Personalized upskilling roadmap',
-                        'Full scam-risk reasoning',
-                      ],
-                      highlighted: true,
-                    )),
-                  ],
-                ),
-                const SizedBox(height: 28),
-
-                ElevatedButton(
-                  onPressed: () => _subscribe(context, ref),
-                  child: const Text('Subscribe via bdapps'),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Billed through your bdapps account (direct carrier billing) — '
-                  'cancel anytime from Manage Subscription.',
-                  style: text.bodySmall,
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _TierCard extends StatelessWidget {
-  const _TierCard({
-    required this.title,
-    required this.price,
-    required this.features,
-    required this.highlighted,
-  });
-
-  final String title;
-  final String price;
-  final List<String> features;
-  final bool highlighted;
-
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: highlighted ? scheme.primary.withValues(alpha: 0.06) : scheme.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: highlighted ? scheme.primary : scheme.outline, width: highlighted ? 1.5 : 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: text.titleLarge),
-          const SizedBox(height: 2),
-          Text(price, style: text.headlineSmall),
-          const SizedBox(height: 12),
-          for (final feature in features)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return Scaffold(
+      appBar: AppBar(title: const Text('Subscribe')),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+              child: Column(
                 children: [
-                  Icon(Icons.check_rounded, size: 16, color: highlighted ? scheme.primary : scheme.onSurfaceVariant),
-                  const SizedBox(width: 6),
-                  Expanded(child: Text(feature, style: text.bodySmall)),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: Image.asset('assets/icon/icon_base.png', width: 72, height: 72),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('Trust Hire', style: text.titleLarge),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Get the full match breakdown and skill roadmap.',
+                    style: text.bodyMedium,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 32),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Log in with your Robi or Airtel number', style: text.titleSmall),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _phoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: InputDecoration(
+                      hintText: '01XXXXXXXXX',
+                      errorText: _errorText,
+                      prefixIcon: const Icon(Icons.phone_iphone_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _submitting ? null : _subscribe,
+                      child: _submitting
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Subscribe with OTP'),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'This app charges via Robi/Airtel ৳2.00 (incl. VAT) daily. Cancel anytime.',
+                    style: text.bodySmall,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Powered by AppsPro',
+                    style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
                 ],
               ),
             ),
-        ],
+          ),
+        ),
       ),
     );
   }
