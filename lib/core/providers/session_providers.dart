@@ -20,10 +20,11 @@ final currentProfileProvider = StreamProvider<UserProfile?>((ref) {
   return ref.watch(profileRepositoryProvider).watchProfile(uid);
 });
 
-/// Live subscription tier for whoever's signed in — defaults to free (see
-/// `Subscription.free`) until step 7 wires a real bdapps subscription.
-/// Shared across `listing_detail` (free/paid content gating), `paywall`,
-/// and `subscription`.
+/// Live subscription state for whoever's signed in. Also what the
+/// router's redirect guard gates on — there's no free tier, so a signed-in
+/// but unsubscribed/lapsed user is sent straight back to `/sign-in` (see
+/// `app_router.dart`). Shared across `listing_detail` (defensive `!isPaid`
+/// copy — see that screen's doc comment), `auth`, and `subscription`.
 final currentSubscriptionProvider = StreamProvider<Subscription>((ref) {
   final uid = ref.watch(currentUidProvider);
   if (uid == null) return Stream.value(const Subscription(uid: ''));

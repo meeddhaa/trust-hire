@@ -85,12 +85,15 @@ class UserProfile extends Equatable {
   final String? photoBase64;
 
   /// A Bangladeshi mobile number, normalized via [normalizeBdPhoneNumber]
-  /// before it's ever saved — the join key the bdapps/AppsPro subscription
-  /// webhook uses to match an incoming `subscriber.created`/`cancelled`
-  /// event back to this user (see `worker/src/appspro.ts`'s doc comment:
-  /// AppsPro's hosted checkout has no way to carry our own uid through to
-  /// the webhook, only ever a phone number). Null until the user reaches
-  /// the paywall and is prompted for one.
+  /// before it's ever saved — the same number this user signed in with
+  /// (see `SignInScreen`/`OtpVerificationScreen`, which sets this right
+  /// after a successful sign-in). Doubles as the join key the AppsPro
+  /// webhook uses to match an incoming `subscriber.cancelled`/etc. event
+  /// back to this user when BDApps initiates it directly, outside a
+  /// request this app made itself (see `worker/src/appspro.ts`'s doc
+  /// comment). Nullable only because the field predates phone+OTP being
+  /// this app's sign-in method — in practice it's set the moment any
+  /// account exists.
   final String? phoneNumber;
 
   /// Work history pulled from the resume upload — see `WorkExperienceEntry`

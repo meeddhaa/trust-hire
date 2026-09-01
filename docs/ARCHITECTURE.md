@@ -650,13 +650,18 @@ round-tripped through BDApps' real SMS/OTP infrastructure yet).
   example for field correctness.
 - [ ] Web landing page
 - [~] bdapps API integration via AppsPro — see "Decision: AppsPro for
-  bdapps DCB" above. Built: webhook route (`/v1/appspro-webhook`, HMAC
-  signature-verified, unit-tested against real Python-computed values),
-  phone-number join key + collection UI, hosted-checkout WebView wired
-  to the paywall. Blocked on: the real `url_slug` (placeholder in
-  `appspro_config.dart`), configuring that webhook URL + events in
-  AppsPro's dashboard, and live end-to-end testing with a real bdapps
-  environment. Not built: the unsubscribe action.
+  bdapps DCB" above. Built: the whole sign-in-is-subscribing flow
+  (`/v1/auth/otp/request`+`/verify`, dual verification against AppsPro
+  before granting anything, Firebase custom-token minting, router-level
+  "no free tier" enforcement), the webhook route (`/v1/appspro-webhook`,
+  HMAC signature-verified, unit-tested against real Python-computed
+  values) for events this app didn't directly cause, and
+  `/v1/subscription/refresh` for stale-state reconciliation. All
+  typechecked and unit-tested (54 Worker tests, including a real RS256
+  signature round-trip for the JWT signing primitive). Not built: the
+  unsubscribe action. Blocked on: live end-to-end testing against a real
+  Robi/Cirkle number and BDApps' actual SMS/OTP infrastructure — nothing
+  in this flow has been exercised outside typechecking/mocked tests yet.
 
 ### Verified on a real device, against real seeded data
 

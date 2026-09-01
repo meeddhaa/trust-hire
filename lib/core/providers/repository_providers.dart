@@ -10,7 +10,7 @@ import '../../data/repositories/subscription_repository.dart';
 import '../../data/services/firebase_auth_service.dart';
 
 /// Plain `Provider`s for repositories/services shared across three or more
-/// features (listings, listing_detail, onboarding, profile, paywall,
+/// features (listings, listing_detail, onboarding, profile, auth,
 /// subscription all touch at least one of these) — centralized here
 /// instead of re-declared per feature, since they hold no per-feature
 /// state, just DI. Feature-specific state (form controllers, per-listing
