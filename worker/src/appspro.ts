@@ -135,24 +135,34 @@ async function findUidByPhone(env: Env, phone: string): Promise<string | null> {
   return matches[0]?.id ?? null;
 }
 
-/** Handles the two subscription-lifecycle events that actually change
- * paywall access. Per this app's own AppsPro dashboard (the "Webhook
- * Events" checklist — a more authoritative, per-app source than
- * AppsPro's generic docs page, and worth trusting over it where they
- * disagree): `subscriber.created` fires when the user *requests* an
- * OTP, not when they complete anything — granting access on it would
- * flip a user to "paid" before they've actually subscribed to anything.
- * `subscriber.verified` is the real "they completed checkout" event;
- * that's what grants access here. `subscriber.cancelled` revokes it.
- * Everything else (the created event, and inbound SMS/USSD forwarding)
- * is acknowledged with 200 and otherwise ignored — nothing in this app
- * reacts to them, and returning anything other than 2xx for an event we
- * simply don't act on would just make AppsPro retry it forever.
+/** Handles the subscription-lifecycle events that actually change paywall
+ * access. AppsPro's own documentation contradicts itself on this: the
+ * per-app dashboard's "Webhook Events" checklist describes
+ * `subscriber.created` as firing "when user requests OTP" (i.e. before
+ * anything is actually confirmed) with `subscriber.verified` as the real
+ * completion event — but the dashboard's own general Docs page's "Event
+ * Catalog" describes `subscriber.created` as firing on "OTP verified —
+ * new subscriber registered" (i.e. IS the completion event) and doesn't
+ * list `subscriber.verified` at all. Rather than bet on which first-party
+ * description is the stale one, both `created` and `verified` are
+ * treated as grant events here — the downside of maybe reacting to
+ * `created` a little early (if the checklist's description turns out
+ * right) is far smaller than the downside of never granting access at
+ * all (if the docs page's description turns out right and `verified`
+ * simply never fires). `reactivated` is in the docs page's Event Catalog
+ * too (a previously-cancelled subscriber re-registering) and costs
+ * nothing to also honor. `cancelled` revokes access.
+ *
+ * Everything else (inbound SMS/USSD forwarding, hosted-checkout
+ * telemetry) is acknowledged with 200 and otherwise ignored — nothing in
+ * this app reacts to them, and returning anything other than 2xx for an
+ * event we simply don't act on would just make AppsPro retry it forever.
  */
 export async function handleAppsProWebhook(env: Env, body: AppsProWebhookBody): Promise<void> {
   const { event, data } = body;
 
-  if (event !== 'subscriber.verified' && event !== 'subscriber.cancelled') {
+  const GRANT_EVENTS = new Set(['subscriber.created', 'subscriber.verified', 'subscriber.reactivated']);
+  if (!GRANT_EVENTS.has(event) && event !== 'subscriber.cancelled') {
     return;
   }
 
@@ -176,9 +186,9 @@ export async function handleAppsProWebhook(env: Env, body: AppsProWebhookBody): 
   // `setDocument` is a full overwrite (no updateMask — see its doc
   // comment in firestoreClient.ts), so a cancel event would otherwise
   // blow away fields like `startedAt` that were only ever set once, at
-  // `subscriber.verified` time. Read first and merge, the same
-  // get-then-set idiom `ApplicationRepository.setStatus` already uses
-  // client-side to preserve `createdAt` across updates.
+  // grant time. Read first and merge, the same get-then-set idiom
+  // `ApplicationRepository.setStatus` already uses client-side to
+  // preserve `createdAt` across updates.
   //
   // Timestamps come back from `getDocument` as ISO strings (Firestore's
   // REST encoding, decoded plainly — see `fromFirestoreValue`), not `Date`
@@ -203,7 +213,7 @@ export async function handleAppsProWebhook(env: Env, body: AppsProWebhookBody): 
     return;
   }
 
-  // subscriber.verified
+  // created, verified, or reactivated — see GRANT_EVENTS above
   await setDocument(env, `subscriptions/${uid}`, {
     tier: 'paid',
     status: 'active',
