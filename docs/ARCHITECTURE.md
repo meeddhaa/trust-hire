@@ -443,6 +443,69 @@ so there's nothing to actually enforce. Built anyway, per an explicit
 ask, with the Settings screen's own copy saying so plainly rather than
 implying it already controls something.
 
+### Decision: AppsPro for bdapps DCB
+
+The brief calls for bdapps direct carrier billing directly; in practice
+this integrates through **AppsPro** (appspro.dev), a subscription-
+management layer built on top of bdapps' own telecom API — registering
+an app on developer.bdapps.com alone only gets an `applicationId`;
+AppsPro is what turns that into OTP-verified phone subscriptions,
+webhooks, and a hosted checkout page, without this app needing to
+implement SMS/OTP/DCB protocol details itself.
+
+**The credentials, and where each one lives:**
+- `publishable_key` (client-safe) → `lib/core/constants/appspro_config.dart`
+- `secret_key` (server-only) → `wrangler secret put APPSPRO_SECRET_KEY`,
+  never in a file, same treatment as `GEMINI_API_KEY`
+- `url_slug` → also `appspro_config.dart`, **still a placeholder** —
+  grab the real one from the AppsPro dashboard's API tab
+
+**The one real integration gap, and how it's closed:** AppsPro's hosted
+checkout has no documented way to carry our own `uid` through to the
+webhook — it only ever reports back a phone number
+(`subscriberId: "tel:8801..."`). So phone number is the join key: the
+paywall collects it (normalized via `normalizeBdPhoneNumber`) before
+opening checkout, and `worker/src/appspro.ts`'s webhook handler queries
+`users` by that exact field to find who to credit. A user who somehow
+subscribes with a phone number that doesn't match any profile is logged,
+not silently dropped — see that file's `findUidByPhone` doc comment.
+
+**Two directions, two different auth stories:**
+- bdapps → AppsPro: four fixed URLs (`/bdapps/sms`, `/ussd`, `/notify`,
+  `/report`) pasted into the bdapps portal, not something this repo's
+  code touches at all — AppsPro's own server handles those.
+- AppsPro → us: one webhook (`/v1/appspro-webhook` on the existing
+  Worker) configured in AppsPro's dashboard, authenticated by an
+  HMAC-SHA256 signature over the canonical (Python `json.dumps(...,
+  sort_keys=True)`-equivalent) request body — not a Firebase ID token,
+  since this call comes from AppsPro's server, not our client. Checked
+  *before* `requireUid` in `index.ts` for exactly that reason.
+  `worker/test/appspro.test.ts`'s expected values were computed by
+  actually running the sample payload through Python, not guessed —
+  getting the canonicalization even slightly wrong (Python's default
+  `", "`/`": "` separators, `ensure_ascii` unicode escaping) makes every
+  signature check fail, not just edge cases.
+
+**Checkout UX:** hosted checkout (`appspro.dev/s/{url_slug}`) opened in
+a WebView (`AppsProCheckoutScreen`), not the embedded WebSDK widget —
+matches how the paywall already works (a full screen, not an in-page
+widget). Two independent signals detect a completed subscription,
+since only one of them is unambiguously documented for hosted checkout
+specifically: a `redirect_url` query param intercepted via the
+WebView's own navigation delegate (documented for hosted checkout), and
+the `"AppsPro"` JavaScript channel AppsPro's SDK posts events through
+(documented for the embedded widget — likely but not confirmed to also
+fire on the hosted checkout page itself, so treated as a bonus signal,
+not the only one relied on).
+
+**Not yet built:** the "Unsubscribe" action (bdapps' own
+`/api/v1/sdk/unsubscribe` takes a phone number, not the
+`bdappsSubscriptionId` the `Subscription` model already has a field
+for — that field name predates having the real API spec; it's still
+populated, just not with something usable for unsubscribing directly)
+and end-to-end live testing (blocked on the real `url_slug` and a live
+AppsPro/bdapps environment to subscribe a real test number against).
+
 ## Status
 
 - [x] Project scaffolded (`flutter create`, Android target)
@@ -495,8 +558,14 @@ implying it already controls something.
   a real listing (Sheba.xyz, a genuine Dhaka tech platform) and a scam
   example for field correctness.
 - [ ] Web landing page
-- [ ] bdapps API integration (paywall/subscription UI exists; the actual
-  checkout + webhook + unsubscribe call are step 7)
+- [~] bdapps API integration via AppsPro — see "Decision: AppsPro for
+  bdapps DCB" above. Built: webhook route (`/v1/appspro-webhook`, HMAC
+  signature-verified, unit-tested against real Python-computed values),
+  phone-number join key + collection UI, hosted-checkout WebView wired
+  to the paywall. Blocked on: the real `url_slug` (placeholder in
+  `appspro_config.dart`), configuring that webhook URL + events in
+  AppsPro's dashboard, and live end-to-end testing with a real bdapps
+  environment. Not built: the unsubscribe action.
 
 ### Verified on a real device, against real seeded data
 

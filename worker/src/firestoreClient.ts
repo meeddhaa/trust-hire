@@ -97,6 +97,51 @@ export async function getDocument(env: Env, path: string): Promise<Record<string
   return fromFirestoreFields(body.fields ?? {});
 }
 
+/** Finds documents in `collection` where `field == value` (equality only —
+ * every current caller just needs "find the user with this phone number",
+ * see appspro.ts) via Firestore's `runQuery` REST endpoint. `getDocument`/
+ * `setDocument` above only address a document directly by path, which
+ * doesn't help when the caller (a bdapps webhook payload) only has a
+ * phone number, not a uid. */
+export async function queryCollection(
+  env: Env,
+  collection: string,
+  field: string,
+  value: string,
+): Promise<{ id: string; data: Record<string, unknown> }[]> {
+  const token = await getServiceAccountAccessToken(env);
+  const url = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents:runQuery`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      structuredQuery: {
+        from: [{ collectionId: collection }],
+        where: {
+          fieldFilter: {
+            field: { fieldPath: field },
+            op: 'EQUAL',
+            value: { stringValue: value },
+          },
+        },
+        limit: 5,
+      },
+    }),
+  });
+  if (!res.ok) throw new Error(`Firestore query failed (${res.status}): ${await res.text()}`);
+
+  const rows = await res.json<Array<{ document?: { name: string; fields?: Record<string, FirestoreValue> } }>>();
+  return rows
+    .filter((row): row is { document: { name: string; fields?: Record<string, FirestoreValue> } } => !!row.document)
+    .map((row) => ({
+      id: row.document.name.split('/').pop()!,
+      data: fromFirestoreFields(row.document.fields ?? {}),
+    }));
+}
+
 /** Fully replaces a document's fields (no `updateMask`, so this is a
  * complete overwrite) — safe here because every write in this Worker
  * always constructs the full `MatchResult`/`ScamAssessment` shape, never a

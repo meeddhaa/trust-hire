@@ -1,18 +1,96 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/providers/repository_providers.dart';
+import '../../../core/providers/session_providers.dart';
 import '../../../core/theme/app_motion.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../../../core/utils/bd_phone.dart';
+import 'appspro_checkout_screen.dart';
 
-/// Tier comparison + subscribe CTA. The bdapps DCB subscription flow
-/// itself (the actual charge + webhook that flips `subscriptions/{uid}`
-/// to paid) is step 7 — deliberately not faked here. Tapping "Subscribe"
-/// today explains that honestly rather than pretending to charge the
-/// user; once step 7 lands, this button starts the real bdapps flow
-/// without this screen needing to change.
-class PaywallScreen extends StatelessWidget {
+/// Tier comparison + subscribe CTA. Tapping "Subscribe via bdapps" opens
+/// AppsPro's hosted checkout (OTP-verified BD phone subscription) — see
+/// `appspro_checkout_screen.dart` and `worker/src/appspro.ts` for the two
+/// halves of that flow. A phone number is collected first if the profile
+/// doesn't have one yet: it's the only join key AppsPro's webhook can
+/// hand back (see `UserProfile.phoneNumber`'s doc comment), so checkout
+/// can't proceed without it.
+class PaywallScreen extends ConsumerWidget {
   const PaywallScreen({super.key});
 
+  Future<void> _subscribe(BuildContext context, WidgetRef ref) async {
+    final uid = ref.read(currentUidProvider);
+    if (uid == null) return;
+    final existingPhone = ref.read(currentProfileProvider).valueOrNull?.phoneNumber;
+
+    if (existingPhone == null) {
+      final phone = await _promptForPhone(context);
+      if (phone == null) return;
+      if (!context.mounted) return;
+      try {
+        await ref.read(profileRepositoryProvider).setPhoneNumber(uid, phone);
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text('$e')));
+        return;
+      }
+    }
+
+    if (!context.mounted) return;
+    final subscribed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const AppsProCheckoutScreen()),
+    );
+    if (subscribed == true && context.mounted) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text("You're subscribed! It may take a moment to reflect here.")));
+    }
+  }
+
+  Future<String?> _promptForPhone(BuildContext context) async {
+    final controller = TextEditingController();
+    String? errorText;
+    return showDialog<String>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setState) => AlertDialog(
+          title: const Text('Your phone number'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Needed for bdapps direct carrier billing — one Bangladeshi mobile number per subscription.'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                keyboardType: TextInputType.phone,
+                decoration: InputDecoration(hintText: '01XXXXXXXXX', errorText: errorText),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () {
+                final value = controller.text.trim();
+                if (!isPlausibleBdPhoneNumber(value)) {
+                  setState(() => errorText = "That doesn't look like a valid Bangladeshi mobile number.");
+                  return;
+                }
+                Navigator.pop(dialogContext, value);
+              },
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final text = Theme.of(context).textTheme;
 
     return Scaffold(
@@ -61,7 +139,7 @@ class PaywallScreen extends StatelessWidget {
                 const SizedBox(height: 28),
 
                 ElevatedButton(
-                  onPressed: () => _showComingSoon(context),
+                  onPressed: () => _subscribe(context, ref),
                   child: const Text('Subscribe via bdapps'),
                 ),
                 const SizedBox(height: 8),
@@ -77,16 +155,6 @@ class PaywallScreen extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  void _showComingSoon(BuildContext context) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text('bdapps subscription checkout is coming in the next build step.'),
-        ),
-      );
   }
 }
 

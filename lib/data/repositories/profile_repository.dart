@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import '../../core/constants/firestore_collections.dart';
 import '../../core/errors/failure.dart';
+import '../../core/utils/bd_phone.dart';
 import '../models/user_profile.dart';
 import '../models/work_experience_entry.dart';
 
@@ -74,6 +75,21 @@ class ProfileRepository {
       await _doc(uid).update({'resumeBase64': base64, 'updatedAt': Timestamp.now()});
     } on FirebaseException {
       throw const NetworkFailure("Couldn't save your resume — check your internet and try again.");
+    }
+  }
+
+  /// Saves the user's phone number, normalized via [normalizeBdPhoneNumber]
+  /// first — see `UserProfile.phoneNumber`'s doc comment for why the exact
+  /// normalized form matters (it's the field the AppsPro webhook queries
+  /// by an exact match, see `worker/src/appspro.ts`).
+  Future<void> setPhoneNumber(String uid, String rawPhone) async {
+    try {
+      await _doc(uid).update({
+        'phoneNumber': normalizeBdPhoneNumber(rawPhone),
+        'updatedAt': Timestamp.now(),
+      });
+    } on FirebaseException {
+      throw const NetworkFailure("Couldn't save your phone number — check your internet and try again.");
     }
   }
 

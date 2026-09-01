@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 
+import '../../core/utils/bd_phone.dart';
 import '../../core/utils/firestore_codec.dart';
 import 'work_experience_entry.dart';
 
@@ -21,6 +22,7 @@ class UserProfile extends Equatable {
     this.educationLevel,
     this.resumeBase64,
     this.photoBase64,
+    this.phoneNumber,
     this.workExperience = const [],
     this.onboardingComplete = false,
     required this.createdAt,
@@ -77,6 +79,15 @@ class UserProfile extends Equatable {
   /// rejecting anything over a hard cap the way the resume upload does.
   final String? photoBase64;
 
+  /// A Bangladeshi mobile number, normalized via [normalizeBdPhoneNumber]
+  /// before it's ever saved — the join key the bdapps/AppsPro subscription
+  /// webhook uses to match an incoming `subscriber.created`/`cancelled`
+  /// event back to this user (see `worker/src/appspro.ts`'s doc comment:
+  /// AppsPro's hosted checkout has no way to carry our own uid through to
+  /// the webhook, only ever a phone number). Null until the user reaches
+  /// the paywall and is prompted for one.
+  final String? phoneNumber;
+
   /// Work history pulled from the resume upload — see `WorkExperienceEntry`
   /// for why `duration` is free text. Wholesale-replaced on every resume
   /// sync (see `ResumeController`), not merged entry-by-entry: there's no
@@ -116,6 +127,7 @@ class UserProfile extends Equatable {
       educationLevel: map['educationLevel'] as String?,
       resumeBase64: map['resumeBase64'] as String?,
       photoBase64: map['photoBase64'] as String?,
+      phoneNumber: map['phoneNumber'] as String?,
       workExperience: (map['workExperience'] as List? ?? const [])
           .map((entry) => WorkExperienceEntry.fromMap(Map<String, dynamic>.from(entry as Map)))
           .toList(),
@@ -135,6 +147,7 @@ class UserProfile extends Equatable {
       'educationLevel': educationLevel,
       'resumeBase64': resumeBase64,
       'photoBase64': photoBase64,
+      'phoneNumber': phoneNumber,
       'workExperience': workExperience.map((entry) => entry.toMap()).toList(),
       'onboardingComplete': onboardingComplete,
       'createdAt': timestampFromDateTime(createdAt),
@@ -150,6 +163,7 @@ class UserProfile extends Equatable {
     String? educationLevel,
     String? resumeBase64,
     String? photoBase64,
+    String? phoneNumber,
     List<WorkExperienceEntry>? workExperience,
     bool? onboardingComplete,
     DateTime? updatedAt,
@@ -164,6 +178,7 @@ class UserProfile extends Equatable {
       educationLevel: educationLevel ?? this.educationLevel,
       resumeBase64: resumeBase64 ?? this.resumeBase64,
       photoBase64: photoBase64 ?? this.photoBase64,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
       workExperience: workExperience ?? this.workExperience,
       onboardingComplete: onboardingComplete ?? this.onboardingComplete,
       createdAt: createdAt,
@@ -182,6 +197,7 @@ class UserProfile extends Equatable {
         educationLevel,
         resumeBase64,
         photoBase64,
+        phoneNumber,
         workExperience,
         onboardingComplete,
         createdAt,

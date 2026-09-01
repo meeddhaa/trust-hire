@@ -28,6 +28,9 @@ interface __SecretEnv_Env {
 	GEMINI_API_KEY: string;
 	FIREBASE_CLIENT_EMAIL: string;
 	FIREBASE_PRIVATE_KEY: string;
+	// bdapps DCB subscription webhook signature key (see appspro.ts) — set
+	// via `wrangler secret put APPSPRO_SECRET_KEY`, never in wrangler.jsonc.
+	APPSPRO_SECRET_KEY: string;
 }
 
 interface Env extends __BaseEnv_Env, __SecretEnv_Env {}

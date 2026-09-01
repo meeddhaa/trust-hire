@@ -1,3 +1,4 @@
+import { AppsProSignatureError, handleAppsProWebhook, verifyAppsProSignature } from './appspro';
 import { AuthError, extractBearerToken, verifyFirebaseIdToken } from './auth';
 import { getDocument, setDocument } from './firestoreClient';
 import { callGeminiForJson, GeminiError } from './gemini';
@@ -269,6 +270,28 @@ export default {
 
     if (request.method !== 'POST') {
       return errorResponse(405, 'Method not allowed');
+    }
+
+    // Checked before requireUid deliberately — this request comes from
+    // AppsPro's own server, not our Flutter client, so it carries no
+    // Firebase ID token at all. Its authenticity instead rests entirely
+    // on the HMAC signature verified inside — see appspro.ts's doc
+    // comment for why that has to be this route's whole auth story.
+    if (url.pathname === '/v1/appspro-webhook') {
+      try {
+        const body = await request.json<{ event?: unknown; data?: unknown }>().catch(() => null);
+        if (!body || typeof body.event !== 'string' || typeof body.data !== 'object' || body.data === null) {
+          return errorResponse(400, 'Malformed webhook body');
+        }
+        const parsedBody = { event: body.event, data: body.data as Record<string, unknown> };
+        await verifyAppsProSignature(env, parsedBody, request.headers.get('X-Signature'));
+        await handleAppsProWebhook(env, parsedBody);
+        return json({ ok: true });
+      } catch (err) {
+        if (err instanceof AppsProSignatureError) return errorResponse(401, err.message);
+        console.error('AppsPro webhook handling failed:', err);
+        return errorResponse(500, 'Internal error');
+      }
     }
 
     try {
