@@ -37,3 +37,24 @@ export function bdOperatorForNormalizedPhone(normalized: string): BdOperator | n
   if (operatorDigit === '6') return 'cirkle';
   return null;
 }
+
+/** `data.subscriberId`/`subscriber_id` arrives as `"tel:8801712345678"`
+ * throughout AppsPro's API (webhooks, `otp/verify`, `sdk/verify`) — this
+ * is the one place that shape gets parsed, shared by `appspro.ts` (the
+ * webhook path) and `subscription.ts` (the direct-API sign-in path). */
+export function phoneFromSubscriberId(subscriberId: unknown): string | null {
+  if (typeof subscriberId !== 'string') return null;
+  const withoutPrefix = subscriberId.startsWith('tel:') ? subscriberId.slice(4) : subscriberId;
+  return withoutPrefix || null;
+}
+
+/** A stable, deterministic uid for a phone-based sign-in — the same
+ * number always reaches the same Firestore profile on every subsequent
+ * sign-in, since a verified bdapps subscription IS the account now (see
+ * `firebaseCustomToken.ts`'s doc comment). Not a hash: the normalized
+ * phone number is already a stable, sufficiently-unique key, and staying
+ * human-readable in the Firebase/Firestore console is more useful here
+ * than an opaque digest would be. */
+export function uidForPhone(normalizedPhone: string): string {
+  return `bdapps_${normalizedPhone}`;
+}

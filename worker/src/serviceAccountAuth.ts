@@ -15,6 +15,8 @@
  * cache in auth.ts), not per-request state.
  */
 
+import { signRs256Jwt } from './jwtSign';
+
 interface Env {
   FIREBASE_CLIENT_EMAIL: string;
   FIREBASE_PRIVATE_KEY: string;
@@ -29,52 +31,15 @@ const SCOPES = 'https://www.googleapis.com/auth/datastore';
 
 let tokenCache: CachedToken | null = null;
 
-function base64UrlEncode(bytes: ArrayBuffer | Uint8Array): string {
-  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  let binary = '';
-  for (const byte of arr) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function pemToPkcs8(pem: string): ArrayBuffer {
-  const base64 = pem
-    .replace(/-----BEGIN PRIVATE KEY-----/, '')
-    .replace(/-----END PRIVATE KEY-----/, '')
-    .replace(/\s/g, '');
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
-}
-
 async function fetchAccessToken(env: Env): Promise<CachedToken> {
   const nowSeconds = Math.floor(Date.now() / 1000);
-  const header = base64UrlEncode(new TextEncoder().encode(JSON.stringify({ alg: 'RS256', typ: 'JWT' })));
-  const payload = base64UrlEncode(
-    new TextEncoder().encode(
-      JSON.stringify({
-        iss: env.FIREBASE_CLIENT_EMAIL,
-        scope: SCOPES,
-        aud: 'https://oauth2.googleapis.com/token',
-        iat: nowSeconds,
-        exp: nowSeconds + 3600,
-      }),
-    ),
-  );
-
-  const key = await crypto.subtle.importKey(
-    'pkcs8',
-    pemToPkcs8(env.FIREBASE_PRIVATE_KEY),
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const signature = await crypto.subtle.sign(
-    'RSASSA-PKCS1-v1_5',
-    key,
-    new TextEncoder().encode(`${header}.${payload}`),
-  );
-  const jwt = `${header}.${payload}.${base64UrlEncode(signature)}`;
+  const jwt = await signRs256Jwt(env.FIREBASE_PRIVATE_KEY, {
+    iss: env.FIREBASE_CLIENT_EMAIL,
+    scope: SCOPES,
+    aud: 'https://oauth2.googleapis.com/token',
+    iat: nowSeconds,
+    exp: nowSeconds + 3600,
+  });
 
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',

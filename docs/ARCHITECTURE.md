@@ -495,65 +495,107 @@ verify at every step — the same operator-selection requirement that
 ruled out the widget also happens to be what makes the direct-API
 approach strictly more secure than either.
 
+**Phone+OTP is this app's only sign-in — not a paywall bolted onto a
+separate account system.** There's no email/password or Google sign-in
+(both removed entirely — see `FirebaseAuthService`'s doc comment) and no
+free tier: a verified bdapps subscription IS the account. This was a
+deliberate, explicit product decision, not an inference — signing in and
+subscribing are literally the same action, and "there is no upgrade to
+plus" is why `SubscriptionScreen` has no such button anymore.
+
 **Current flow — native UI, backend-verified, secret-key never
-client-side:**
-1. `PaywallScreen`: user picks Robi or Cirkle, enters a number.
+client-side, no session until a subscription is confirmed:**
+1. `SignInScreen`: user picks Robi or Cirkle, enters a number.
    Client-side validation is a convenience only (`isPlausibleBdPhoneNumber`)
    — it never gates what the Worker will accept.
-2. `POST /v1/subscription/otp/request` (`worker/src/subscription.ts`,
-   behind the same `requireUid` Firebase-ID-token check every other
-   `/v1/*` route uses): re-derives the operator from the phone number
-   itself, rejects anything but Robi/Cirkle, then calls AppsPro's
-   `POST /sdk/otp/request` (Bearer `secret_key`) to send a real OTP SMS.
-   No OTP is ever generated or stored by this app.
+2. `POST /v1/auth/otp/request` (`worker/src/subscription.ts`'s
+   `requestOtp`, wired in `index.ts` *before* `requireUid` — there's no
+   Firebase session yet at this point, that's the whole reason this
+   route exists, same reasoning as the webhook below): re-derives the
+   operator from the phone number itself, rejects anything but
+   Robi/Cirkle, then calls AppsPro's `POST /sdk/otp/request` (Bearer
+   `secret_key`) to send a real OTP SMS. No OTP is ever generated or
+   stored by this app.
 3. `OtpVerificationScreen`: user enters the code.
-4. `POST /v1/subscription/otp/verify`: calls AppsPro's
+4. `POST /v1/auth/otp/verify` (`verifyOtpAndSignIn`): calls AppsPro's
    `POST /sdk/otp/verify` (Bearer). On success this returns a
    `subscriber_id` — but that alone isn't trusted. This route then
    independently calls `GET /sdk/verify/{subscriber_id}` (Bearer) and
-   only grants paid access (`grantPaidSubscription`, writing
-   `subscriptions/{uid}`) if THAT also confirms `valid: true`. A
-   `subscriber_id` that OTP-verify just minted failing that follow-up
-   check would mean AppsPro's own two endpoints disagree with each
-   other — caught, not papered over. Any failure at either step (wrong
-   OTP, expired reference_no, rate limit, unconfirmed subscription)
-   throws `AppsProApiError`, surfaced to the user with AppsPro's own
+   only proceeds if THAT also confirms `valid: true`. A `subscriber_id`
+   that OTP-verify just minted failing that follow-up check would mean
+   AppsPro's own two endpoints disagree with each other — caught, not
+   papered over. Any failure at either step (wrong OTP, expired
+   reference_no, rate limit, unconfirmed subscription) throws
+   `AppsProApiError`, surfaced to the user with AppsPro's own
    `status_detail`/`reason` text rather than a guessed-at message.
-5. The uid granting access is *this request's own*, authenticated the
-   same way as every other Worker call — no phone-number-based lookup
-   needed for this path, unlike the webhook below.
+5. Only once verified: the uid is derived deterministically from the
+   phone number (`uidForPhone`, `worker/src/bdPhone.ts` — the same
+   number always reaches the same Firestore profile), `subscriptions/{uid}`
+   is granted (`grantPaidSubscription`), and a **Firebase Auth custom
+   token** is minted for that uid (`firebaseCustomToken.ts`, signed
+   directly with the service account's private key — Cloudflare Workers
+   can't run the Node-only Admin SDK, so this hand-builds the exact JWT
+   shape `admin.auth().createCustomToken` produces, sharing its RS256
+   signing primitive (`jwtSign.ts`) with the Firestore service-account
+   token exchange).
+6. The client exchanges that token via
+   `FirebaseAuthService.signInWithCustomToken` — a real, ID-token-bearing
+   Firebase session, indistinguishable to Firestore rules or any other
+   Worker route from one created any other way. `ensureProfileExists` +
+   `setPhoneNumber` run right after, same as the old email/password flow
+   did post-sign-in, just with the phone number this flow already
+   collected instead of pulling it off a `FirebaseUser`.
+7. This also doubles as the resubscribe path: a lapsed/canceled
+   subscriber runs through the exact same two routes — see the router's
+   redirect guard below.
+
+**The router enforces "no free tier," not just the UI:** `app_router.dart`'s
+`_redirect` checks `currentSubscriptionProvider` right after auth, before
+onboarding — signed in but not (or no longer) subscribed sends the user
+straight back to `/sign-in`, same as never having signed in at all.
+`SubscriptionScreen`'s and the listing-detail locked-content card's own
+`!isPaid` branches are defensive only (a brief render before that
+redirect catches up), pointing at `/sign-in` rather than a deleted
+paywall route.
 
 **The webhook still matters — but for a narrower job now:** AppsPro's
 signed webhook (`POST /v1/appspro-webhook`, verified by HMAC-SHA256 over
 the canonical body *before* `requireUid` in `index.ts`, since this call
 comes from AppsPro's server, not our client) is now only the channel for
 subscription events this app didn't directly cause — a cancellation or
-renewal initiated from BDApps' own side. It still needs the phone-number
-join key (`findUidByPhone`, `worker/src/appspro.ts`) since there's no
-request context to borrow a uid from over there, unlike the direct-API
-path above. `grantPaidSubscription`/`revokePaidSubscription` are shared
-between both files — one Firestore read-merge-write, called from
-whichever path actually observed the event.
+renewal initiated from BDApps' own side, while the user's Firebase
+session is already sitting open. It still needs the phone-number join
+key (`findUidByPhone`, `worker/src/appspro.ts`) since there's no request
+context to borrow a uid from over there, unlike the sign-in path above
+(which derives it deterministically instead).
+`grantPaidSubscription`/`revokePaidSubscription` are shared between both
+files — one Firestore read-merge-write, called from whichever path
+actually observed the event.
 
 **Refreshing stale state:** `SubscriptionScreen` calls
-`POST /v1/subscription/refresh` once, silently, whenever it opens —
+`POST /v1/subscription/refresh` once, silently, whenever it opens (this
+one *is* behind `requireUid` — by then a session already exists) —
 re-checks `GET /sdk/verify/{subscriber_id}` and reconciles
 `subscriptions/{uid}` rather than trusting whatever was last written
 forever. A no-op for anyone who has never subscribed.
 
 **Pricing:** deliberately not hardcoded anywhere in this app. The
-paywall's copy names no specific figure — the real rate is whatever's
-configured on AppsPro's own Pricing tab for this app, not a number to
-keep in sync by hand in Dart/TS source.
+sign-in screen's copy names no specific figure — the real rate is
+whatever's configured on AppsPro's own Pricing tab for this app, not a
+number to keep in sync by hand in Dart/TS source.
 
 **Not yet built:** the "Unsubscribe" action (bdapps' own
 `/api/v1/sdk/unsubscribe` takes a phone number, not the
 `bdappsSubscriptionId` the `Subscription` model already has a field
 for — that field name predates having the real API spec; it's still
-populated, just not with something usable for unsubscribing directly)
-and end-to-end live testing against a real Robi/Cirkle number (the
-whole flow above is typechecked and unit-tested, but nothing has
-actually round-tripped through BDApps' real SMS/OTP infrastructure yet).
+populated, just not with something usable for unsubscribing directly),
+a migration path for any pre-pivot email/password test accounts (none
+expected to matter pre-launch, but noted rather than silently
+abandoned), and end-to-end live testing against a real Robi/Cirkle
+number (the whole flow above is typechecked and unit-tested — including
+a real RS256 signature-verification round-trip for the JWT signing
+primitive in `worker/test/jwtSign.test.ts` — but nothing has actually
+round-tripped through BDApps' real SMS/OTP infrastructure yet).
 
 ## Status
 

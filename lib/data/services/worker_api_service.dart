@@ -4,6 +4,7 @@ import '../../core/network/api_client.dart';
 import '../models/job_coach_result.dart';
 import '../models/match_result.dart';
 import '../models/otp_request_result.dart';
+import '../models/otp_sign_in_result.dart';
 import '../models/resume_extraction_result.dart';
 import '../models/resume_tailor_result.dart';
 import '../models/scam_assessment.dart';
@@ -99,43 +100,41 @@ class WorkerApiService {
   }
 
   /// Sends a real OTP SMS via AppsPro/BDApps to [rawPhone] — no local OTP
-  /// generation happens anywhere in this app. Throws (via [ApiClient]) if
+  /// generation happens anywhere in this app. No ID token is sent (see
+  /// `ApiClient.postJson`): this is the first step of signing in, so there
+  /// is no session yet to send a token for. Throws (via [ApiClient]) if
   /// the number isn't a supported operator (Robi/Cirkle) or if AppsPro
   /// itself rejects the request (e.g. its own rate limit) — see
   /// `worker/src/subscription.ts`'s `requestOtp` for what's actually
   /// enforced server-side; this call carries no operator field of its own,
   /// deliberately, since the Worker re-derives it from the phone number
   /// itself rather than trusting anything the client claims.
-  Future<OtpRequestResult> requestSubscriptionOtp(String rawPhone) async {
-    final token = await _requireIdToken();
+  Future<OtpRequestResult> requestAuthOtp(String rawPhone) async {
     final response = await _apiClient.postJson(
       WorkerConfig.baseUrl,
-      WorkerConfig.subscriptionOtpRequestPath,
-      bearerToken: token,
+      WorkerConfig.authOtpRequestPath,
       body: {'phone': rawPhone},
     );
     return OtpRequestResult.fromJson(response);
   }
 
   /// Verifies the OTP with AppsPro/BDApps and, only if that ALSO passes an
-  /// independent subscription-status check server-side, grants paid access
-  /// — see `worker/src/subscription.ts`'s `verifyOtpAndActivate`. Throws a
-  /// [Failure] for a wrong/expired OTP, a rate limit, or a subscription
-  /// that still can't be confirmed active even after OTP verification
-  /// succeeds; never silently grants access on the client's own say-so.
-  Future<Subscription> verifySubscriptionOtp({
-    required String uid,
-    required String referenceNo,
-    required String otp,
-  }) async {
-    final token = await _requireIdToken();
+  /// independent subscription-status check server-side, mints a Firebase
+  /// custom token for the resulting (phone-derived) uid — see
+  /// `worker/src/subscription.ts`'s `verifyOtpAndSignIn`. The caller still
+  /// has to exchange [OtpSignInResult.customToken] via
+  /// `FirebaseAuthService.signInWithCustomToken` to actually be signed in;
+  /// this call alone doesn't do that. Throws a [Failure] for a wrong/
+  /// expired OTP, a rate limit, or a subscription that still can't be
+  /// confirmed active even after OTP verification succeeds — never
+  /// silently grants access on the client's own say-so.
+  Future<OtpSignInResult> verifyAuthOtp({required String referenceNo, required String otp}) async {
     final response = await _apiClient.postJson(
       WorkerConfig.baseUrl,
-      WorkerConfig.subscriptionOtpVerifyPath,
-      bearerToken: token,
+      WorkerConfig.authOtpVerifyPath,
       body: {'referenceNo': referenceNo, 'otp': otp},
     );
-    return Subscription.fromMap(response, uid: uid);
+    return OtpSignInResult.fromJson(response);
   }
 
   /// Re-checks the current subscription's live status with AppsPro rather

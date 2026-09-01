@@ -16,7 +16,7 @@ import {
 } from './prompts';
 import { checkAndConsumeRateLimit } from './rateLimiter';
 import { bandTrustBadge, computeRuleScore, computeScamRuleFlags } from './scamRules';
-import { AppsProApiError, refreshSubscriptionStatus, requestOtp, verifyOtpAndActivate } from './subscription';
+import { AppsProApiError, refreshSubscriptionStatus, requestOtp, verifyOtpAndSignIn } from './subscription';
 import type {
   JobCoachGeminiResult,
   JobListingDoc,
@@ -234,15 +234,18 @@ async function handleJobCoach(request: Request, env: Env, uid: string): Promise<
   return json(result);
 }
 
-/** Shared by all three subscription routes below so the client always
- * gets back the same shape `Subscription.fromMap` already knows how to
- * parse (see `lib/data/models/subscription.dart`) — the same pattern
+/** Shared by the subscription-refresh route so the client always gets
+ * back the same shape `Subscription.fromMap` already knows how to parse
+ * (see `lib/data/models/subscription.dart`) — the same pattern
  * `handleMatch` uses for `MatchResult`. */
 async function currentSubscriptionJson(env: Env, uid: string): Promise<Record<string, unknown>> {
   return (await getDocument(env, `subscriptions/${uid}`)) ?? { tier: 'free', status: 'none' };
 }
 
-async function handleSubscriptionOtpRequest(request: Request, env: Env): Promise<Response> {
+/** No `requireUid` — there's no session yet at this point, that's the
+ * whole reason this route exists. Wired *before* `requireUid` in `fetch`,
+ * same reasoning as the AppsPro webhook route below. */
+async function handleAuthOtpRequest(request: Request, env: Env): Promise<Response> {
   const body = await request.json<{ phone?: unknown }>().catch(() => null);
   if (typeof body?.phone !== 'string' || !body.phone.trim()) {
     throw new TypeError('Request body must include a non-empty "phone" string');
@@ -251,7 +254,12 @@ async function handleSubscriptionOtpRequest(request: Request, env: Env): Promise
   return json({ referenceNo, statusDetail });
 }
 
-async function handleSubscriptionOtpVerify(request: Request, env: Env, uid: string): Promise<Response> {
+/** Verifies the OTP, independently confirms the subscription, and mints a
+ * Firebase custom token for the resulting (deterministic, phone-derived)
+ * uid — see `subscription.ts`'s `verifyOtpAndSignIn`. The client exchanges
+ * `customToken` for a real session via `signInWithCustomToken`; this
+ * route itself never sees a Firebase ID token, since none exists yet. */
+async function handleAuthOtpVerify(request: Request, env: Env): Promise<Response> {
   const body = await request.json<{ referenceNo?: unknown; otp?: unknown }>().catch(() => null);
   if (typeof body?.referenceNo !== 'string' || !body.referenceNo.trim()) {
     throw new TypeError('Request body must include a non-empty "referenceNo" string');
@@ -259,8 +267,8 @@ async function handleSubscriptionOtpVerify(request: Request, env: Env, uid: stri
   if (typeof body?.otp !== 'string' || !body.otp.trim()) {
     throw new TypeError('Request body must include a non-empty "otp" string');
   }
-  await verifyOtpAndActivate(env, uid, body.referenceNo, body.otp);
-  return json(await currentSubscriptionJson(env, uid));
+  const { uid, customToken } = await verifyOtpAndSignIn(env, body.referenceNo, body.otp);
+  return json({ uid, customToken });
 }
 
 async function handleSubscriptionRefresh(env: Env, uid: string): Promise<Response> {
@@ -329,6 +337,22 @@ export default {
       }
     }
 
+    // Also checked before requireUid, deliberately, and for the same
+    // reason as the webhook above: there is no Firebase session yet at
+    // this point in the sign-in flow — these two routes are what
+    // *creates* one. See `handleAuthOtpVerify`'s doc comment.
+    if (url.pathname === '/v1/auth/otp/request' || url.pathname === '/v1/auth/otp/verify') {
+      try {
+        if (url.pathname === '/v1/auth/otp/request') return await handleAuthOtpRequest(request, env);
+        return await handleAuthOtpVerify(request, env);
+      } catch (err) {
+        if (err instanceof AppsProApiError) return errorResponse(400, err.message);
+        if (err instanceof TypeError) return errorResponse(400, err.message);
+        console.error('Auth OTP handling failed:', err);
+        return errorResponse(500, 'Internal error');
+      }
+    }
+
     try {
       const uid = await requireUid(request, env);
 
@@ -337,8 +361,6 @@ export default {
       if (url.pathname === '/v1/resume-tailor') return await handleResumeTailor(request, env, uid);
       if (url.pathname === '/v1/job-coach') return await handleJobCoach(request, env, uid);
       if (url.pathname === '/v1/resume-skills') return await handleExtractResumeSkills(request, env, uid);
-      if (url.pathname === '/v1/subscription/otp/request') return await handleSubscriptionOtpRequest(request, env);
-      if (url.pathname === '/v1/subscription/otp/verify') return await handleSubscriptionOtpVerify(request, env, uid);
       if (url.pathname === '/v1/subscription/refresh') return await handleSubscriptionRefresh(env, uid);
       return errorResponse(404, 'Unknown endpoint');
     } catch (err) {

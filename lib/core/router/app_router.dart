@@ -9,7 +9,6 @@ import '../../features/job_coach/presentation/job_coach_screen.dart';
 import '../../features/listing_detail/presentation/listing_detail_screen.dart';
 import '../../features/listings/presentation/listings_feed_screen.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
-import '../../features/paywall/presentation/paywall_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/saved_jobs/presentation/saved_jobs_screen.dart';
 import '../../features/settings/presentation/resume_screen.dart';
@@ -105,7 +104,6 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
       GoRoute(path: '/resume', builder: (context, state) => const ResumeScreen()),
       GoRoute(path: '/subscription', builder: (context, state) => const SubscriptionScreen()),
-      GoRoute(path: '/paywall', builder: (context, state) => const PaywallScreen()),
     ],
   );
 });
@@ -118,6 +116,17 @@ String? _redirect(Ref ref, GoRouterState state) {
   final onSignIn = state.matchedLocation == '/sign-in';
 
   if (!isSignedIn) return onSignIn ? null : '/sign-in';
+
+  // Signing in IS subscribing now (see `SignInScreen`'s doc comment) — but
+  // a subscription can still lapse afterward (a cancellation from BDApps'
+  // own side, caught by the webhook; or this app's own periodic refresh
+  // finding it invalid). There's no free tier to fall back to: an
+  // inactive subscription sends the user right back through `/sign-in` to
+  // resubscribe, exactly like a first-time sign-in.
+  final subscriptionState = ref.read(currentSubscriptionProvider);
+  if (subscriptionState.isLoading) return null; // splash stays until we know
+  final isSubscribed = subscriptionState.valueOrNull?.isPaid ?? false;
+  if (!isSubscribed) return onSignIn ? null : '/sign-in';
 
   final profileState = ref.read(currentProfileProvider);
   if (profileState.isLoading) return null; // splash stays until profile is known
@@ -133,10 +142,12 @@ String? _redirect(Ref ref, GoRouterState state) {
 
 /// Bridges Riverpod's `ref.listen` to `GoRouter`'s `Listenable`-based
 /// refresh mechanism — `ChangeNotifier.notifyListeners()` is what makes
-/// `GoRouter` re-run `redirect` after auth or profile state changes.
+/// `GoRouter` re-run `redirect` after auth, subscription, or profile state
+/// changes.
 class _RouterRefreshNotifier extends ChangeNotifier {
   _RouterRefreshNotifier(Ref ref) {
     ref.listen(authStateProvider, (_, _) => notifyListeners());
+    ref.listen(currentSubscriptionProvider, (_, _) => notifyListeners());
     ref.listen(currentProfileProvider, (_, _) => notifyListeners());
   }
 }

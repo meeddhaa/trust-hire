@@ -1,17 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/errors/failure.dart';
-import '../../../core/providers/session_providers.dart';
+import '../../../core/providers/repository_providers.dart';
+import '../../../data/services/firebase_auth_service.dart';
 import '../../../data/services/worker_api_service.dart';
 
-/// Step 5-9 of the bdapps subscribe flow: the user enters the OTP AppsPro/
-/// BDApps just sent as a real SMS (see `PaywallScreen`, which pushes this
-/// screen after a successful `/v1/subscription/otp/request`). Nothing here
+/// The rest of the bdapps sign-in flow: the user enters the OTP AppsPro/
+/// BDApps just sent as a real SMS (see `SignInScreen`, which pushes this
+/// screen after a successful `/v1/auth/otp/request`). Nothing here
 /// generates, validates, or auto-accepts an OTP locally — every attempt
-/// round-trips to `worker/src/subscription.ts`'s `verifyOtpAndActivate`,
-/// which is also where paid access actually gets granted, only once
-/// AppsPro/BDApps confirm both the OTP AND the resulting subscription are
-/// genuinely valid.
+/// round-trips to `worker/src/subscription.ts`'s `verifyOtpAndSignIn`,
+/// which independently confirms the resulting subscription is genuinely
+/// active before minting anything.
+///
+/// A successful verify returns a Firebase custom token, not a session by
+/// itself — [_verify] still has to exchange it
+/// (`FirebaseAuthService.signInWithCustomToken`) and ensure the Firestore
+/// profile exists before this screen pops. Only once all of that has
+/// happened does `authStateProvider` flip and the router take the user
+/// off `/sign-in` on its own.
 class OtpVerificationScreen extends ConsumerStatefulWidget {
   const OtpVerificationScreen({super.key, required this.phone, required this.referenceNo});
 
@@ -25,6 +32,7 @@ class OtpVerificationScreen extends ConsumerStatefulWidget {
 class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
   final _otpController = TextEditingController();
   final _workerApi = WorkerApiService();
+  final _authService = FirebaseAuthService();
 
   // Reassigned on resend — every verify attempt must use whichever
   // reference_no was issued most recently, not necessarily the one this
@@ -47,15 +55,22 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
       setState(() => _errorText = 'Enter the code you were sent.');
       return;
     }
-    final uid = ref.read(currentUidProvider);
-    if (uid == null) return;
 
     setState(() {
       _verifying = true;
       _errorText = null;
     });
     try {
-      await _workerApi.verifySubscriptionOtp(uid: uid, referenceNo: _referenceNo, otp: otp);
+      final signInResult = await _workerApi.verifyAuthOtp(referenceNo: _referenceNo, otp: otp);
+      final user = await _authService.signInWithCustomToken(signInResult.customToken);
+      // A custom-token session carries no email/displayName, so the
+      // profile doc has to be created (or found, for a returning number)
+      // and have its phone number set explicitly — the same two calls
+      // the old email/password flow made after its own sign-in, just
+      // with the phone number this flow already collected instead of
+      // pulling it off the FirebaseUser.
+      await ref.read(profileRepositoryProvider).ensureProfileExists(user);
+      await ref.read(profileRepositoryProvider).setPhoneNumber(signInResult.uid, widget.phone);
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (e) {
@@ -73,7 +88,7 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
       _errorText = null;
     });
     try {
-      final result = await _workerApi.requestSubscriptionOtp(widget.phone);
+      final result = await _workerApi.requestAuthOtp(widget.phone);
       if (!mounted) return;
       setState(() {
         _referenceNo = result.referenceNo;
@@ -118,6 +133,7 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
                     textAlign: TextAlign.center,
                     style: text.headlineSmall,
                     decoration: InputDecoration(hintText: '••••', errorText: _errorText),
+                    onSubmitted: (_) => _verify(),
                   ),
                   const SizedBox(height: 24),
                   SizedBox(

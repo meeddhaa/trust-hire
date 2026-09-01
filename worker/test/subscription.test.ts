@@ -12,12 +12,18 @@ vi.mock('../src/firestoreClient', () => ({
   getDocument: (...args: unknown[]) => getDocument(...args),
 }));
 
+const mintFirebaseCustomToken = vi.fn();
+vi.mock('../src/firebaseCustomToken', () => ({
+  mintFirebaseCustomToken: (...args: unknown[]) => mintFirebaseCustomToken(...args),
+}));
+
 // Imported after the mocks above so subscription.ts picks up the mocked
-// modules rather than the real Firestore/appspro implementations — this
-// file only exercises the AppsPro API + gating logic, not Firestore I/O
-// (already covered separately: grant/revoke's own shape lives in
-// appspro.ts, unit-tested there implicitly via handleAppsProWebhook).
-import { AppsProApiError, refreshSubscriptionStatus, requestOtp, verifyOtpAndActivate } from '../src/subscription';
+// modules rather than the real Firestore/appspro/token implementations —
+// this file only exercises the AppsPro API + gating logic, not Firestore
+// I/O or JWT signing (already covered separately: grant/revoke's own
+// shape lives in appspro.ts, unit-tested there implicitly via
+// handleAppsProWebhook; RS256 signing lives in jwtSign.ts).
+import { AppsProApiError, refreshSubscriptionStatus, requestOtp, verifyOtpAndSignIn } from '../src/subscription';
 
 const env = { APPSPRO_SECRET_KEY: 'sk_test' } as never;
 
@@ -90,13 +96,15 @@ describe('requestOtp', () => {
   });
 });
 
-describe('verifyOtpAndActivate', () => {
+describe('verifyOtpAndSignIn', () => {
   beforeEach(() => {
     grantPaidSubscription.mockReset();
     revokePaidSubscription.mockReset();
+    mintFirebaseCustomToken.mockReset();
+    mintFirebaseCustomToken.mockResolvedValue('minted.jwt.token');
   });
 
-  it('grants access only once BOTH otp/verify AND the follow-up /sdk/verify agree', async () => {
+  it('grants access and mints a session only once BOTH otp/verify AND the follow-up /sdk/verify agree', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -105,9 +113,12 @@ describe('verifyOtpAndActivate', () => {
       .mockResolvedValueOnce(jsonResponse({ valid: true, subscriber: { status: 'ACTIVE' } }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await verifyOtpAndActivate(env, 'uid123', 'ref_123', '1234');
+    const result = await verifyOtpAndSignIn(env, 'ref_123', '1234');
 
-    expect(grantPaidSubscription).toHaveBeenCalledWith(env, 'uid123', 'tel:8801812345678');
+    // uid is deterministic from the phone number, never client-supplied.
+    expect(result).toEqual({ uid: 'bdapps_8801812345678', customToken: 'minted.jwt.token' });
+    expect(grantPaidSubscription).toHaveBeenCalledWith(env, 'bdapps_8801812345678', 'tel:8801812345678');
+    expect(mintFirebaseCustomToken).toHaveBeenCalledWith(env, 'bdapps_8801812345678');
     expect(revokePaidSubscription).not.toHaveBeenCalled();
     // The follow-up call hits /sdk/verify/<subscriber_id>, URL-encoded.
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -117,14 +128,15 @@ describe('verifyOtpAndActivate', () => {
     );
   });
 
-  it('does NOT grant access if OTP verification itself fails (e.g. wrong OTP)', async () => {
+  it('does NOT sign in if OTP verification itself fails (e.g. wrong OTP)', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ status_code: 'E400', status_detail: 'Invalid OTP' })));
 
-    await expect(verifyOtpAndActivate(env, 'uid123', 'ref_123', '0000')).rejects.toThrow('Invalid OTP');
+    await expect(verifyOtpAndSignIn(env, 'ref_123', '0000')).rejects.toThrow('Invalid OTP');
     expect(grantPaidSubscription).not.toHaveBeenCalled();
+    expect(mintFirebaseCustomToken).not.toHaveBeenCalled();
   });
 
-  it('does NOT grant access if otp/verify succeeds but /sdk/verify says invalid', async () => {
+  it('does NOT sign in if otp/verify succeeds but /sdk/verify says invalid', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -133,8 +145,9 @@ describe('verifyOtpAndActivate', () => {
       .mockResolvedValueOnce(jsonResponse({ valid: false, reason: 'UNREGISTERED' }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(verifyOtpAndActivate(env, 'uid123', 'ref_123', '1234')).rejects.toThrow('UNREGISTERED');
+    await expect(verifyOtpAndSignIn(env, 'ref_123', '1234')).rejects.toThrow('UNREGISTERED');
     expect(grantPaidSubscription).not.toHaveBeenCalled();
+    expect(mintFirebaseCustomToken).not.toHaveBeenCalled();
   });
 });
 

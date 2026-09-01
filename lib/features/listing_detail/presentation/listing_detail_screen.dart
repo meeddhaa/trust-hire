@@ -191,8 +191,13 @@ class _ListingDetailBody extends ConsumerWidget {
                       ),
                     ),
                     TextButton(
-                      onPressed: () => context.push('/paywall'),
-                      child: const Text('Upgrade'),
+                      // Defensive only, same as SubscriptionScreen's own
+                      // `!isPaid` branch — the router already sends anyone
+                      // whose subscription lapses straight to `/sign-in`
+                      // (there's no free tier this card would otherwise be
+                      // gating), so this shouldn't normally be reachable.
+                      onPressed: () => context.go('/sign-in'),
+                      child: const Text('Resubscribe'),
                     ),
                   ],
                 ),

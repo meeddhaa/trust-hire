@@ -8,10 +8,19 @@ import '../../../data/services/worker_api_service.dart';
 /// Shows current subscription state and the unsubscribe action. Reads the
 /// real `subscriptions/{uid}` doc (via `currentSubscriptionProvider`, a
 /// live Firestore stream) — written only by the Worker, either right after
-/// a successful OTP verify (`worker/src/subscription.ts`) or by the
+/// a successful OTP sign-in (`worker/src/subscription.ts`) or by the
 /// AppsPro webhook (`worker/src/appspro.ts`) for events this app didn't
 /// directly cause. The unsubscribe button stays disabled until bdapps'
 /// own unsubscribe endpoint is wired up rather than faking a cancellation.
+///
+/// There's no "Upgrade to Plus" here — there's no free tier at all (see
+/// `SignInScreen`'s doc comment: a verified subscription IS the account),
+/// so `isPaid` should always read true by the time anyone reaches this
+/// screen; the router's redirect guard sends anyone whose subscription
+/// lapses straight back to `/sign-in` instead. The `!isPaid` branch below
+/// is defensive only — a brief render before that redirect catches up —
+/// and offers "Resubscribe" rather than a button pointing at a deleted
+/// paywall route.
 class SubscriptionScreen extends ConsumerStatefulWidget {
   const SubscriptionScreen({super.key});
 
@@ -57,14 +66,14 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(subscription.isPaid ? 'TrustHire Plus' : 'Free plan', style: text.headlineSmall),
+                Text('Trust Hire', style: text.headlineSmall),
                 const SizedBox(height: 8),
                 Text(_statusLine(subscription), style: text.bodyMedium),
                 const SizedBox(height: 28),
                 if (!subscription.isPaid)
                   ElevatedButton(
-                    onPressed: () => context.push('/paywall'),
-                    child: const Text('Upgrade to Plus'),
+                    onPressed: () => context.go('/sign-in'),
+                    child: const Text('Resubscribe'),
                   )
                 else
                   OutlinedButton(
@@ -83,9 +92,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     if (subscription.isPaid) {
       final renews = subscription.renewsAt;
       return renews == null
-          ? "You're subscribed to TrustHire Plus."
+          ? "You're subscribed via bdapps."
           : 'Renews on ${renews.toLocal().toString().split(' ').first}.';
     }
-    return "You're on the free plan — match % and trust badge only.";
+    return 'Your subscription needs to be renewed to keep using Trust Hire.';
   }
 }

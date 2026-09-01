@@ -1,5 +1,5 @@
 /**
- * The bdapps DCB subscribe flow, driven directly by this app's own native
+ * The bdapps DCB sign-in flow, driven directly by this app's own native
  * UI rather than AppsPro's hosted checkout page or embedded WebSDK widget
  * — see docs/ARCHITECTURE.md → "Decision: AppsPro for bdapps DCB" for why
  * this replaced that earlier approach: operator selection (Robi/Cirkle)
@@ -7,16 +7,17 @@
  * UIs' OTP verification happens in a context this Worker can't observe
  * directly, only infer from webhooks/postMessage events after the fact.
  *
- * Calling `/sdk/otp/request` and `/sdk/otp/verify` here instead means:
+ * There is no separate "account" system underneath this — phone+OTP IS
+ * this app's sign-in, and a verified bdapps subscription IS the account
+ * (there's no free tier, no "guest" mode; see `handleAuthOtpVerify` in
+ * index.ts). Calling `/sdk/otp/request` and `/sdk/otp/verify` here means:
  *   - every privileged AppsPro call (Bearer `secret_key`) stays entirely
  *     server-side, never reaching the Flutter client — see this file's
  *     `callAppsPro`, the only place that header is attached.
- *   - the uid granting access is *this request's own*, authenticated by
- *     the same Firebase ID token every other `/v1/*` route already
- *     requires (see index.ts's `requireUid`) — no need to rediscover it
- *     from a phone-number lookup the way the async webhook path
- *     (`appspro.ts`) has to, because there's no other request context to
- *     borrow a uid from over there.
+ *   - the uid granting access is deterministic from the phone number
+ *     itself (`uidForPhone`), minted into a real Firebase session via
+ *     `mintFirebaseCustomToken` — the client never invents or chooses its
+ *     own uid, and the same number always reaches the same profile.
  *
  * The webhook in `appspro.ts` still matters here: it's the only channel
  * for events this app didn't directly cause (a cancellation from BDApps'
@@ -25,8 +26,9 @@
  * confirmed — never on the strength of anything the client claims.
  */
 
-import { bdOperatorForNormalizedPhone, normalizeBdPhoneNumber } from './bdPhone';
+import { bdOperatorForNormalizedPhone, normalizeBdPhoneNumber, phoneFromSubscriberId, uidForPhone } from './bdPhone';
 import { grantPaidSubscription, revokePaidSubscription } from './appspro';
+import { mintFirebaseCustomToken } from './firebaseCustomToken';
 import { getDocument } from './firestoreClient';
 
 interface Env {
@@ -127,16 +129,25 @@ export async function requestOtp(env: Env, rawPhone: string): Promise<{ referenc
   return { referenceNo: response.reference_no, statusDetail: response.status_detail ?? 'Success' };
 }
 
-/** Steps 5-9: verify the OTP with AppsPro/BDApps (never locally), then —
- * critically — independently confirm the resulting subscriber's status
- * via `/sdk/verify/{subscriber_id}` before granting anything. OTP-verify
- * succeeding is BDApps' word that a subscriber now exists; the follow-up
- * `valid` check is AppsPro's own word that it's actually active. Access
- * is granted only once both agree — a subscriber_id that OTP-verify just
- * minted failing the follow-up check would mean those two disagree with
- * each other, which this is here to catch, not paper over (step 10: no
- * access without a positive verification). */
-export async function verifyOtpAndActivate(env: Env, uid: string, referenceNo: string, otp: string): Promise<void> {
+/** Steps 5-9, and the whole sign-in: verify the OTP with AppsPro/BDApps
+ * (never locally), then — critically — independently confirm the
+ * resulting subscriber's status via `/sdk/verify/{subscriber_id}` before
+ * granting anything. OTP-verify succeeding is BDApps' word that a
+ * subscriber now exists; the follow-up `valid` check is AppsPro's own
+ * word that it's actually active. Only once both agree does this derive
+ * the account's uid from the phone number and mint a session for it — a
+ * subscriber_id that OTP-verify just minted failing the follow-up check
+ * would mean those two disagree with each other, which this is here to
+ * catch, not paper over (step 10: no access without a positive
+ * verification). Also doubles as the resubscribe path: a lapsed/canceled
+ * subscriber runs through the exact same function, since signing back in
+ * and reactivating are the same action once there's no separate account
+ * system to keep signed in through a lapse. */
+export async function verifyOtpAndSignIn(
+  env: Env,
+  referenceNo: string,
+  otp: string,
+): Promise<{ uid: string; customToken: string }> {
   const verifyResponse = await callAppsPro<OtpVerifyResponse>(env, 'POST', '/sdk/otp/verify', {
     reference_no: referenceNo,
     otp,
@@ -155,7 +166,18 @@ export async function verifyOtpAndActivate(env: Env, uid: string, referenceNo: s
     throw new AppsProApiError(authoritative.reason || 'Subscription could not be verified — please try again.');
   }
 
+  const phone = phoneFromSubscriberId(subscriberId);
+  if (!phone) {
+    // Shouldn't happen — AppsPro just handed this same value back from
+    // otp/verify in the shape its own docs describe — but a malformed
+    // subscriber_id can't be turned into a uid, so this can't proceed.
+    throw new AppsProApiError('Could not identify the subscriber — please try again.');
+  }
+  const uid = uidForPhone(phone);
+
   await grantPaidSubscription(env, uid, subscriberId);
+  const customToken = await mintFirebaseCustomToken(env, uid);
+  return { uid, customToken };
 }
 
 /** "On future app launches, verify the subscription when appropriate

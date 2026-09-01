@@ -17,6 +17,7 @@
  * by that field rather than trusting any uid the payload might claim.
  */
 
+import { phoneFromSubscriberId } from './bdPhone';
 import { getDocument, queryCollection, setDocument } from './firestoreClient';
 
 interface Env {
@@ -119,15 +120,6 @@ export async function verifyAppsProSignature(
   if (!timingSafeEqual(expected, signatureHeader.toLowerCase())) {
     throw new AppsProSignatureError('Signature mismatch');
   }
-}
-
-/** `data.subscriberId` arrives as `"tel:8801712345678"` (AppsPro's own
- * subscriber-id format, not a raw phone number) — this is the join key
- * back to `ProfileRepository.setPhoneNumber`'s raw-digits storage. */
-function phoneFromSubscriberId(subscriberId: unknown): string | null {
-  if (typeof subscriberId !== 'string') return null;
-  const withoutPrefix = subscriberId.startsWith('tel:') ? subscriberId.slice(4) : subscriberId;
-  return withoutPrefix || null;
 }
 
 async function findUidByPhone(env: Env, phone: string): Promise<string | null> {

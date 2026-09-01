@@ -12,8 +12,12 @@ class ApiClient {
 
   final http.Client _client;
 
-  /// POSTs [body] as JSON to `baseUrl + path` with `Authorization: Bearer
-  /// $bearerToken`, and returns the decoded JSON response body.
+  /// POSTs [body] as JSON to `baseUrl + path`, and returns the decoded
+  /// JSON response body. [bearerToken] is sent as `Authorization: Bearer
+  /// $bearerToken` when given; `null` for the handful of pre-auth Worker
+  /// routes (the bdapps sign-in OTP endpoints — see
+  /// `WorkerApiService.requestAuthOtp`/`verifyAuthOtp`) that run before
+  /// any Firebase session exists to send a token for.
   ///
   /// Throws a [Failure] subtype for every non-2xx response and for
   /// network-level errors (timeout, no connectivity, unreachable host) —
@@ -21,7 +25,7 @@ class ApiClient {
   Future<Map<String, dynamic>> postJson(
     String baseUrl,
     String path, {
-    required String bearerToken,
+    String? bearerToken,
     required Map<String, dynamic> body,
   }) async {
     final http.Response response;
@@ -30,7 +34,7 @@ class ApiClient {
           .post(
             Uri.parse('$baseUrl$path'),
             headers: {
-              'Authorization': 'Bearer $bearerToken',
+              if (bearerToken != null) 'Authorization': 'Bearer $bearerToken',
               'Content-Type': 'application/json',
             },
             body: jsonEncode(body),

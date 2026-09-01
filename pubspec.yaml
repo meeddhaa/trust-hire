@@ -53,7 +53,9 @@ dependencies:
   firebase_core: ^3.8.0
   firebase_auth: ^5.3.3
   cloud_firestore: ^5.5.0
-  google_sign_in: ^6.2.2
+  # No google_sign_in: sign-in is bdapps phone+OTP only now (see
+  # SignInScreen) — there's no separate account system for a Google
+  # identity to link into.
 
   # --- Networking (Cloudflare Worker relay + bdapps API) ---
   http: ^1.2.2
