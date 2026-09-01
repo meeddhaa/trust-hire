@@ -20,6 +20,12 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final _skillController = TextEditingController();
+  // Autocomplete's own assertion requires focusNode and textEditingController
+  // to be given together or not at all — caught live: passing only the
+  // controller (needed so `_addSkill` can clear it after each add) without
+  // this crashed onboarding outright with "(focusNode == null) ==
+  // (textEditingController == null)' is not true".
+  final _skillFocusNode = FocusNode();
   final _headlineController = TextEditingController();
   final _yearsController = TextEditingController();
   final _educationController = TextEditingController();
@@ -28,6 +34,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   @override
   void dispose() {
     _skillController.dispose();
+    _skillFocusNode.dispose();
     _headlineController.dispose();
     _yearsController.dispose();
     _educationController.dispose();
@@ -103,6 +110,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 const SizedBox(height: 16),
                 Autocomplete<String>(
                   textEditingController: _skillController,
+                  focusNode: _skillFocusNode,
                   optionsBuilder: (value) =>
                       SkillKeywords.suggestionsFor(value.text, exclude: _skills),
                   onSelected: _addSkill,
