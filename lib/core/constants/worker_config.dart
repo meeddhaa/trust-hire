@@ -11,6 +11,13 @@ abstract final class WorkerConfig {
   static const String jobCoachPath = '/v1/job-coach';
   static const String resumeSkillsPath = '/v1/resume-skills';
 
+  /// The bdapps subscribe flow (see `worker/src/subscription.ts`) — every
+  /// privileged AppsPro call (Bearer `secret_key`) happens behind these
+  /// three, never directly from this app.
+  static const String subscriptionOtpRequestPath = '/v1/subscription/otp/request';
+  static const String subscriptionOtpVerifyPath = '/v1/subscription/otp/verify';
+  static const String subscriptionRefreshPath = '/v1/subscription/refresh';
+
   /// Mirrors the Worker's `MATCH_MODEL_VERSION`/`SCAM_MODEL_VERSION` vars.
   /// Used client-side only to decide whether a Firestore-cached result is
   /// still fresh before bothering to call the Worker at all — the Worker

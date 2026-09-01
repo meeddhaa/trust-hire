@@ -449,62 +449,111 @@ The brief calls for bdapps direct carrier billing directly; in practice
 this integrates through **AppsPro** (appspro.dev), a subscription-
 management layer built on top of bdapps' own telecom API — registering
 an app on developer.bdapps.com alone only gets an `applicationId`;
-AppsPro is what turns that into OTP-verified phone subscriptions,
-webhooks, and a hosted checkout page, without this app needing to
-implement SMS/OTP/DCB protocol details itself.
+AppsPro is what turns that into OTP-verified phone subscriptions and
+signed webhooks, without this app needing to implement SMS/OTP/DCB
+protocol details itself.
+
+**Supported operators:** Robi (018) and Cirkle (016) only — a bdapps
+business requirement, not an AppsPro/BDApps API restriction. Derived
+purely from the phone number's own digits in both
+`lib/core/utils/bd_phone.dart` (client) and `worker/src/bdPhone.ts`
+(server, the authoritative copy — see below), never from a client-sent
+"operator" field.
 
 **The credentials, and where each one lives:**
-- `publishable_key` (client-safe) → `lib/core/constants/appspro_config.dart`
+- `publishable_key` — **not used anywhere in this app.** It only matters
+  for AppsPro's hosted-checkout/WebSDK-widget integrations, both of
+  which this app abandoned (see "Two abandoned approaches" below).
 - `secret_key` (server-only) → `wrangler secret put APPSPRO_SECRET_KEY`,
-  never in a file, same treatment as `GEMINI_API_KEY`
-- `url_slug` → also `appspro_config.dart`, **still a placeholder** —
-  grab the real one from the AppsPro dashboard's API tab
+  never in a file, same treatment as `GEMINI_API_KEY`. This is the ONLY
+  AppsPro credential this app holds anywhere, and it lives exclusively
+  in `worker/src/subscription.ts`'s `callAppsPro` — the Flutter client
+  never sees it, never could.
+- `url_slug`, `app_id` — not used. Both were specific to the hosted
+  checkout page / embed flow this app no longer uses.
 
-**The one real integration gap, and how it's closed:** AppsPro's hosted
-checkout has no documented way to carry our own `uid` through to the
-webhook — it only ever reports back a phone number
-(`subscriberId: "tel:8801..."`). So phone number is the join key: the
-paywall collects it (normalized via `normalizeBdPhoneNumber`) before
-opening checkout, and `worker/src/appspro.ts`'s webhook handler queries
-`users` by that exact field to find who to credit. A user who somehow
-subscribes with a phone number that doesn't match any profile is logged,
-not silently dropped — see that file's `findUidByPhone` doc comment.
+**Two abandoned approaches, and why:** this app tried, in order —
+1. AppsPro's *hosted checkout page* (`appspro.dev/s/{url_slug}`) loaded
+   in a WebView. Turned out its documented completion signal is a
+   static, per-app-configured `checkout_redirect_url` with no dynamic
+   query params — no way to recover a phone number from it, and no
+   confirmation its page posts JS-channel events at all (that's only
+   documented for the embedded widget below).
+2. AppsPro's *embedded WebSDK widget* (`sdk.elements.create('subscribe')`,
+   loaded via `loadHtmlString`). This one DOES reliably post a `success`
+   event with `data.subscriberId` to a `"AppsPro"` JS channel — but it's
+   a generic phone+OTP form with no operator-selection step, and BDApps
+   business requirements need Robi/Cirkle picked explicitly. It also
+   left the whole OTP verification step opaque to this app — nothing
+   server-side ever independently confirmed the resulting subscription
+   was actually valid before the client-observed `success` event alone
+   would have been trusted to grant access.
 
-**Two directions, two different auth stories:**
-- bdapps → AppsPro: four fixed URLs (`/bdapps/sms`, `/ussd`, `/notify`,
-  `/report`) pasted into the bdapps portal, not something this repo's
-  code touches at all — AppsPro's own server handles those.
-- AppsPro → us: one webhook (`/v1/appspro-webhook` on the existing
-  Worker) configured in AppsPro's dashboard, authenticated by an
-  HMAC-SHA256 signature over the canonical (Python `json.dumps(...,
-  sort_keys=True)`-equivalent) request body — not a Firebase ID token,
-  since this call comes from AppsPro's server, not our client. Checked
-  *before* `requireUid` in `index.ts` for exactly that reason.
-  `worker/test/appspro.test.ts`'s expected values were computed by
-  actually running the sample payload through Python, not guessed —
-  getting the canonicalization even slightly wrong (Python's default
-  `", "`/`": "` separators, `ensure_ascii` unicode escaping) makes every
-  signature check fail, not just edge cases.
+Both are gone from the codebase now, replaced by a native flow (below)
+that this app's own backend drives directly and can independently
+verify at every step — the same operator-selection requirement that
+ruled out the widget also happens to be what makes the direct-API
+approach strictly more secure than either.
 
-**Checkout UX:** hosted checkout (`appspro.dev/s/{url_slug}`) opened in
-a WebView (`AppsProCheckoutScreen`), not the embedded WebSDK widget —
-matches how the paywall already works (a full screen, not an in-page
-widget). Two independent signals detect a completed subscription,
-since only one of them is unambiguously documented for hosted checkout
-specifically: a `redirect_url` query param intercepted via the
-WebView's own navigation delegate (documented for hosted checkout), and
-the `"AppsPro"` JavaScript channel AppsPro's SDK posts events through
-(documented for the embedded widget — likely but not confirmed to also
-fire on the hosted checkout page itself, so treated as a bonus signal,
-not the only one relied on).
+**Current flow — native UI, backend-verified, secret-key never
+client-side:**
+1. `PaywallScreen`: user picks Robi or Cirkle, enters a number.
+   Client-side validation is a convenience only (`isPlausibleBdPhoneNumber`)
+   — it never gates what the Worker will accept.
+2. `POST /v1/subscription/otp/request` (`worker/src/subscription.ts`,
+   behind the same `requireUid` Firebase-ID-token check every other
+   `/v1/*` route uses): re-derives the operator from the phone number
+   itself, rejects anything but Robi/Cirkle, then calls AppsPro's
+   `POST /sdk/otp/request` (Bearer `secret_key`) to send a real OTP SMS.
+   No OTP is ever generated or stored by this app.
+3. `OtpVerificationScreen`: user enters the code.
+4. `POST /v1/subscription/otp/verify`: calls AppsPro's
+   `POST /sdk/otp/verify` (Bearer). On success this returns a
+   `subscriber_id` — but that alone isn't trusted. This route then
+   independently calls `GET /sdk/verify/{subscriber_id}` (Bearer) and
+   only grants paid access (`grantPaidSubscription`, writing
+   `subscriptions/{uid}`) if THAT also confirms `valid: true`. A
+   `subscriber_id` that OTP-verify just minted failing that follow-up
+   check would mean AppsPro's own two endpoints disagree with each
+   other — caught, not papered over. Any failure at either step (wrong
+   OTP, expired reference_no, rate limit, unconfirmed subscription)
+   throws `AppsProApiError`, surfaced to the user with AppsPro's own
+   `status_detail`/`reason` text rather than a guessed-at message.
+5. The uid granting access is *this request's own*, authenticated the
+   same way as every other Worker call — no phone-number-based lookup
+   needed for this path, unlike the webhook below.
+
+**The webhook still matters — but for a narrower job now:** AppsPro's
+signed webhook (`POST /v1/appspro-webhook`, verified by HMAC-SHA256 over
+the canonical body *before* `requireUid` in `index.ts`, since this call
+comes from AppsPro's server, not our client) is now only the channel for
+subscription events this app didn't directly cause — a cancellation or
+renewal initiated from BDApps' own side. It still needs the phone-number
+join key (`findUidByPhone`, `worker/src/appspro.ts`) since there's no
+request context to borrow a uid from over there, unlike the direct-API
+path above. `grantPaidSubscription`/`revokePaidSubscription` are shared
+between both files — one Firestore read-merge-write, called from
+whichever path actually observed the event.
+
+**Refreshing stale state:** `SubscriptionScreen` calls
+`POST /v1/subscription/refresh` once, silently, whenever it opens —
+re-checks `GET /sdk/verify/{subscriber_id}` and reconciles
+`subscriptions/{uid}` rather than trusting whatever was last written
+forever. A no-op for anyone who has never subscribed.
+
+**Pricing:** deliberately not hardcoded anywhere in this app. The
+paywall's copy names no specific figure — the real rate is whatever's
+configured on AppsPro's own Pricing tab for this app, not a number to
+keep in sync by hand in Dart/TS source.
 
 **Not yet built:** the "Unsubscribe" action (bdapps' own
 `/api/v1/sdk/unsubscribe` takes a phone number, not the
 `bdappsSubscriptionId` the `Subscription` model already has a field
 for — that field name predates having the real API spec; it's still
 populated, just not with something usable for unsubscribing directly)
-and end-to-end live testing (blocked on the real `url_slug` and a live
-AppsPro/bdapps environment to subscribe a real test number against).
+and end-to-end live testing against a real Robi/Cirkle number (the
+whole flow above is typechecked and unit-tested, but nothing has
+actually round-tripped through BDApps' real SMS/OTP infrastructure yet).
 
 ## Status
 

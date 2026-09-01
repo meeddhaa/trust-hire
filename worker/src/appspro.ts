@@ -135,6 +135,66 @@ async function findUidByPhone(env: Env, phone: string): Promise<string | null> {
   return matches[0]?.id ?? null;
 }
 
+/** `setDocument` is a full overwrite (no updateMask — see its doc comment
+ * in firestoreClient.ts), so granting/revoking would otherwise blow away
+ * fields like `startedAt` that are only ever set once. Read first and
+ * merge, the same get-then-set idiom `ApplicationRepository.setStatus`
+ * already uses client-side to preserve `createdAt` across updates.
+ *
+ * Timestamps come back from `getDocument` as ISO strings (Firestore's
+ * REST encoding, decoded plainly — see `fromFirestoreValue`), not `Date`
+ * instances. `toFirestoreFields` only recognizes an actual `Date` as a
+ * timestamp; passing the string straight back through would silently
+ * re-store it as `stringValue` instead of `timestampValue`. Both get
+ * reconstructed as `Date` here before being written again. */
+async function readExistingSubscriptionDates(
+  env: Env,
+  uid: string,
+): Promise<{ startedAt: Date | null; renewsAt: Date | null }> {
+  const existing = (await getDocument(env, `subscriptions/${uid}`)) ?? {};
+  return {
+    startedAt: typeof existing.startedAt === 'string' ? new Date(existing.startedAt) : null,
+    renewsAt: typeof existing.renewsAt === 'string' ? new Date(existing.renewsAt) : null,
+  };
+}
+
+/** Shared by the webhook handler below AND `subscription.ts`'s direct
+ * OTP-verify path — both ultimately just mean "this bdapps subscription
+ * is confirmed active," so both funnel through the same write rather than
+ * each maintaining their own copy of the grant shape. */
+export async function grantPaidSubscription(env: Env, uid: string, bdappsSubscriptionId: unknown): Promise<void> {
+  const { startedAt, renewsAt } = await readExistingSubscriptionDates(env, uid);
+  await setDocument(env, `subscriptions/${uid}`, {
+    tier: 'paid',
+    status: 'active',
+    bdappsSubscriptionId,
+    startedAt: startedAt ?? new Date(),
+    renewsAt,
+    canceledAt: null,
+  });
+}
+
+/** `revokedStatus` distinguishes an explicit cancellation from a lapsed/
+ * expired one — both `SubscriptionStatus` values already exist client-side
+ * (see `lib/data/models/subscription.dart`), this just decides which one
+ * a given revoke represents. */
+export async function revokePaidSubscription(
+  env: Env,
+  uid: string,
+  bdappsSubscriptionId: unknown,
+  revokedStatus: 'canceled' | 'expired' = 'canceled',
+): Promise<void> {
+  const { startedAt, renewsAt } = await readExistingSubscriptionDates(env, uid);
+  await setDocument(env, `subscriptions/${uid}`, {
+    tier: 'paid',
+    status: revokedStatus,
+    bdappsSubscriptionId,
+    startedAt,
+    renewsAt,
+    canceledAt: new Date(),
+  });
+}
+
 /** Handles the subscription-lifecycle events that actually change paywall
  * access. AppsPro's own documentation contradicts itself on this: the
  * per-app dashboard's "Webhook Events" checklist describes
@@ -183,43 +243,11 @@ export async function handleAppsProWebhook(env: Env, body: AppsProWebhookBody): 
     return;
   }
 
-  // `setDocument` is a full overwrite (no updateMask — see its doc
-  // comment in firestoreClient.ts), so a cancel event would otherwise
-  // blow away fields like `startedAt` that were only ever set once, at
-  // grant time. Read first and merge, the same get-then-set idiom
-  // `ApplicationRepository.setStatus` already uses client-side to
-  // preserve `createdAt` across updates.
-  //
-  // Timestamps come back from `getDocument` as ISO strings (Firestore's
-  // REST encoding, decoded plainly — see `fromFirestoreValue`), not `Date`
-  // instances. `toFirestoreFields` only recognizes an actual `Date` as a
-  // timestamp; passing the string straight back through would silently
-  // re-store it as `stringValue` instead of `timestampValue`. Both get
-  // reconstructed as `Date` here before being written again.
-  const existing = (await getDocument(env, `subscriptions/${uid}`)) ?? {};
-  const existingStartedAt = typeof existing.startedAt === 'string' ? new Date(existing.startedAt) : null;
-  const existingRenewsAt = typeof existing.renewsAt === 'string' ? new Date(existing.renewsAt) : null;
-  const now = new Date();
-
   if (event === 'subscriber.cancelled') {
-    await setDocument(env, `subscriptions/${uid}`, {
-      tier: 'paid',
-      status: 'canceled',
-      bdappsSubscriptionId: data.subscriberId,
-      startedAt: existingStartedAt,
-      renewsAt: existingRenewsAt,
-      canceledAt: now,
-    });
+    await revokePaidSubscription(env, uid, data.subscriberId);
     return;
   }
 
   // created, verified, or reactivated — see GRANT_EVENTS above
-  await setDocument(env, `subscriptions/${uid}`, {
-    tier: 'paid',
-    status: 'active',
-    bdappsSubscriptionId: data.subscriberId,
-    startedAt: existingStartedAt ?? now,
-    renewsAt: existingRenewsAt,
-    canceledAt: null,
-  });
+  await grantPaidSubscription(env, uid, data.subscriberId);
 }

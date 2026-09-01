@@ -3,18 +3,46 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/providers/session_providers.dart';
 import '../../../data/models/subscription.dart';
+import '../../../data/services/worker_api_service.dart';
 
 /// Shows current subscription state and the unsubscribe action. Reads the
-/// real `subscriptions/{uid}` doc (via `currentSubscriptionProvider`) —
-/// today that's always free for everyone, since nothing writes a paid
-/// subscription until step 7's bdapps webhook exists. The unsubscribe
-/// button is wired to call the bdapps API in step 7; until then it's
-/// disabled with an explanation rather than faking a cancellation.
-class SubscriptionScreen extends ConsumerWidget {
+/// real `subscriptions/{uid}` doc (via `currentSubscriptionProvider`, a
+/// live Firestore stream) — written only by the Worker, either right after
+/// a successful OTP verify (`worker/src/subscription.ts`) or by the
+/// AppsPro webhook (`worker/src/appspro.ts`) for events this app didn't
+/// directly cause. The unsubscribe button stays disabled until bdapps'
+/// own unsubscribe endpoint is wired up rather than faking a cancellation.
+class SubscriptionScreen extends ConsumerStatefulWidget {
   const SubscriptionScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SubscriptionScreen> createState() => _SubscriptionScreenState();
+}
+
+class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // "Verify the subscription when appropriate rather than permanently
+    // trusting a local boolean" — opening this screen is exactly that
+    // moment. Silent and best-effort: the live Firestore stream above is
+    // already the screen's real source of truth, so a failed refresh
+    // (offline, AppsPro down) just leaves the last-known state on screen
+    // instead of surfacing an error for a background reconciliation call.
+    final uid = ref.read(currentUidProvider);
+    if (uid != null) _silentlyRefresh(uid);
+  }
+
+  Future<void> _silentlyRefresh(String uid) async {
+    try {
+      await WorkerApiService().refreshSubscriptionStatus(uid: uid);
+    } catch (_) {
+      // Best-effort — see initState's doc comment.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final subscriptionAsync = ref.watch(currentSubscriptionProvider);
 
@@ -40,7 +68,7 @@ class SubscriptionScreen extends ConsumerWidget {
                   )
                 else
                   OutlinedButton(
-                    onPressed: null, // enabled once step 7 wires the bdapps unsubscribe call
+                    onPressed: null, // enabled once bdapps' own unsubscribe endpoint is wired up
                     child: const Text('Unsubscribe'),
                   ),
               ],

@@ -16,6 +16,7 @@ import {
 } from './prompts';
 import { checkAndConsumeRateLimit } from './rateLimiter';
 import { bandTrustBadge, computeRuleScore, computeScamRuleFlags } from './scamRules';
+import { AppsProApiError, refreshSubscriptionStatus, requestOtp, verifyOtpAndActivate } from './subscription';
 import type {
   JobCoachGeminiResult,
   JobListingDoc,
@@ -233,6 +234,40 @@ async function handleJobCoach(request: Request, env: Env, uid: string): Promise<
   return json(result);
 }
 
+/** Shared by all three subscription routes below so the client always
+ * gets back the same shape `Subscription.fromMap` already knows how to
+ * parse (see `lib/data/models/subscription.dart`) — the same pattern
+ * `handleMatch` uses for `MatchResult`. */
+async function currentSubscriptionJson(env: Env, uid: string): Promise<Record<string, unknown>> {
+  return (await getDocument(env, `subscriptions/${uid}`)) ?? { tier: 'free', status: 'none' };
+}
+
+async function handleSubscriptionOtpRequest(request: Request, env: Env): Promise<Response> {
+  const body = await request.json<{ phone?: unknown }>().catch(() => null);
+  if (typeof body?.phone !== 'string' || !body.phone.trim()) {
+    throw new TypeError('Request body must include a non-empty "phone" string');
+  }
+  const { referenceNo, statusDetail } = await requestOtp(env, body.phone);
+  return json({ referenceNo, statusDetail });
+}
+
+async function handleSubscriptionOtpVerify(request: Request, env: Env, uid: string): Promise<Response> {
+  const body = await request.json<{ referenceNo?: unknown; otp?: unknown }>().catch(() => null);
+  if (typeof body?.referenceNo !== 'string' || !body.referenceNo.trim()) {
+    throw new TypeError('Request body must include a non-empty "referenceNo" string');
+  }
+  if (typeof body?.otp !== 'string' || !body.otp.trim()) {
+    throw new TypeError('Request body must include a non-empty "otp" string');
+  }
+  await verifyOtpAndActivate(env, uid, body.referenceNo, body.otp);
+  return json(await currentSubscriptionJson(env, uid));
+}
+
+async function handleSubscriptionRefresh(env: Env, uid: string): Promise<Response> {
+  await refreshSubscriptionStatus(env, uid);
+  return json(await currentSubscriptionJson(env, uid));
+}
+
 async function handleExtractResumeSkills(request: Request, env: Env, uid: string): Promise<Response> {
   const body = await request.json<{ existingSkills?: unknown }>().catch(() => null);
   const existingSkills = Array.isArray(body?.existingSkills)
@@ -302,9 +337,13 @@ export default {
       if (url.pathname === '/v1/resume-tailor') return await handleResumeTailor(request, env, uid);
       if (url.pathname === '/v1/job-coach') return await handleJobCoach(request, env, uid);
       if (url.pathname === '/v1/resume-skills') return await handleExtractResumeSkills(request, env, uid);
+      if (url.pathname === '/v1/subscription/otp/request') return await handleSubscriptionOtpRequest(request, env);
+      if (url.pathname === '/v1/subscription/otp/verify') return await handleSubscriptionOtpVerify(request, env, uid);
+      if (url.pathname === '/v1/subscription/refresh') return await handleSubscriptionRefresh(env, uid);
       return errorResponse(404, 'Unknown endpoint');
     } catch (err) {
       if (err instanceof AuthError) return errorResponse(401, err.message);
+      if (err instanceof AppsProApiError) return errorResponse(400, err.message);
       if (err instanceof TypeError) return errorResponse(400, err.message);
       if (err instanceof GeminiError) {
         console.error('Gemini call failed:', err.message);
