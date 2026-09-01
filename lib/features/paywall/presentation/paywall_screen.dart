@@ -1,74 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/providers/repository_providers.dart';
-import '../../../core/providers/session_providers.dart';
-import '../../../core/utils/bd_phone.dart';
 import 'appspro_checkout_screen.dart';
 
-/// Subscribe screen — deliberately just phone number in, OTP checkout out,
-/// matching AppsPro's own hosted-checkout pages (see the "Notes CT"
-/// reference screenshot): icon, one line of copy, a phone field, one
-/// button, the price disclaimer, done. No tier comparison — there's only
-/// one tier, priced entirely on AppsPro's side (see its Pricing tab).
-///
-/// A phone number is collected here (or reused from the profile if already
-/// set) because it's the only join key AppsPro's webhook can hand back —
-/// see `UserProfile.phoneNumber`'s doc comment and `worker/src/appspro.ts`.
-class PaywallScreen extends ConsumerStatefulWidget {
+/// Subscribe screen — deliberately just icon, copy, one button. Tapping
+/// "Subscribe with OTP" goes straight into `AppsProCheckoutScreen`; there's
+/// no phone-number field here at all. AppsPro's own WebSDK widget is the
+/// only place a phone number is ever typed, and its `success` event is
+/// what hands the number back to this app (see that screen's doc comment
+/// for why collecting it here first turned out to be the wrong approach —
+/// double entry, and a widget-embed hosts the OTP form better anyway).
+class PaywallScreen extends ConsumerWidget {
   const PaywallScreen({super.key});
 
-  @override
-  ConsumerState<PaywallScreen> createState() => _PaywallScreenState();
-}
-
-class _PaywallScreenState extends ConsumerState<PaywallScreen> {
-  final _phoneController = TextEditingController();
-  String? _errorText;
-  bool _submitting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    final existingPhone = ref.read(currentProfileProvider).valueOrNull?.phoneNumber;
-    if (existingPhone != null) _phoneController.text = existingPhone;
-  }
-
-  @override
-  void dispose() {
-    _phoneController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _subscribe() async {
-    final uid = ref.read(currentUidProvider);
-    if (uid == null) return;
-    final value = _phoneController.text.trim();
-    if (!isPlausibleBdPhoneNumber(value)) {
-      setState(() => _errorText = "That doesn't look like a valid Robi or Airtel number.");
-      return;
-    }
-
-    setState(() {
-      _errorText = null;
-      _submitting = true;
-    });
-    try {
-      await ref.read(profileRepositoryProvider).setPhoneNumber(uid, value);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _submitting = false);
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('$e')));
-      return;
-    }
-    if (!mounted) return;
-    setState(() => _submitting = false);
-
+  Future<void> _subscribe(BuildContext context) async {
     final subscribed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => const AppsProCheckoutScreen()),
     );
-    if (subscribed == true && mounted) {
+    if (subscribed == true && context.mounted) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(const SnackBar(content: Text("You're subscribed! It may take a moment to reflect here.")));
@@ -76,7 +24,7 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
 
@@ -103,32 +51,11 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 32),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text('Log in with your Robi or Airtel number', style: text.titleSmall),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _phoneController,
-                    keyboardType: TextInputType.phone,
-                    decoration: InputDecoration(
-                      hintText: '01XXXXXXXXX',
-                      errorText: _errorText,
-                      prefixIcon: const Icon(Icons.phone_iphone_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: _submitting ? null : _subscribe,
-                      child: _submitting
-                          ? const SizedBox(
-                              height: 18,
-                              width: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Subscribe with OTP'),
+                      onPressed: () => _subscribe(context),
+                      child: const Text('Subscribe with OTP'),
                     ),
                   ),
                   const SizedBox(height: 14),
