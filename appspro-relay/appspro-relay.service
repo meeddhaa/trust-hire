@@ -1,0 +1,19 @@
+[Unit]
+Description=AppsPro static-IP relay
+After=network.target
+
+[Service]
+# Set the real secret here before starting — generate one with e.g.
+# `openssl rand -hex 32` and use the SAME value for the Worker's
+# APPSPRO_RELAY_SECRET (see the main README's deploy instructions).
+Environment=RELAY_SHARED_SECRET=REPLACE_ME
+Environment=PORT=8787
+ExecStart=/usr/bin/node /opt/appspro-relay/server.js
+Restart=always
+RestartSec=3
+User=appspro-relay
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

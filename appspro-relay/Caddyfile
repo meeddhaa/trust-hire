@@ -1,0 +1,13 @@
+# Replace with your VM's actual public IP, in the same dotted form, as a
+# sslip.io subdomain — e.g. a VM at 130.61.20.5 becomes:
+#
+#   130.61.20.5.sslip.io
+#
+# sslip.io resolves that hostname straight back to the embedded IP with
+# no account/DNS setup needed, which is all Caddy needs to request a
+# real Let's Encrypt certificate automatically — no domain purchase, no
+# manual DNS records. See this directory's README.md for the full
+# walkthrough.
+REPLACE_WITH_YOUR_VM_IP.sslip.io {
+	reverse_proxy 127.0.0.1:8787
+}

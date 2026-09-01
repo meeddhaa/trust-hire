@@ -24,6 +24,16 @@
  * own side, a renewal). This file only ever grants access in direct
  * response to a verify call *this* server just made and independently
  * confirmed — never on the strength of anything the client claims.
+ *
+ * One more hop, live in production: AppsPro's dashboard restricts its
+ * Bearer-authed SDK API to an "Allowed Host Address(es)" list, but
+ * Cloudflare Workers don't call out from one fixed IP (confirmed live —
+ * three diagnostic requests each landed on a different Cloudflare edge
+ * IP). `callAppsPro` below routes through `appspro-relay/` — a tiny
+ * always-on VM with one real static IP — instead of calling
+ * api.appspro.dev directly, whenever `APPSPRO_RELAY_URL`/
+ * `APPSPRO_RELAY_SECRET` are configured. See that directory's README for
+ * why and how it's deployed.
  */
 
 import { bdOperatorForNormalizedPhone, normalizeBdPhoneNumber, phoneFromSubscriberId, uidForPhone } from './bdPhone';
@@ -36,9 +46,24 @@ interface Env {
   FIREBASE_CLIENT_EMAIL: string;
   FIREBASE_PRIVATE_KEY: string;
   APPSPRO_SECRET_KEY: string;
+  /** Base URL of the static-IP relay (see `appspro-relay/`) — set once
+   * that's deployed. Both this and `APPSPRO_RELAY_SECRET` must be present
+   * for `callAppsPro` to route through it; either missing falls back to
+   * calling AppsPro directly (useful before the relay exists, though in
+   * production that path is currently blocked by AppsPro's own "Allowed
+   * Host Address(es)" restriction — Cloudflare Workers don't call out
+   * from one fixed IP, confirmed live across multiple requests each
+   * landing on a different Cloudflare edge IP). Not sensitive itself —
+   * a plain `wrangler.jsonc` var, not a secret. */
+  APPSPRO_RELAY_URL?: string;
+  /** Shared secret proving a request to the relay really came from this
+   * Worker — see `appspro-relay/server.js`'s doc comment. Set via
+   * `wrangler secret put APPSPRO_RELAY_SECRET`, matching whatever value
+   * the relay's own `RELAY_SHARED_SECRET` env var holds. */
+  APPSPRO_RELAY_SECRET?: string;
 }
 
-const APPSPRO_API_BASE = 'https://api.appspro.dev/api/v1';
+const APPSPRO_DIRECT_API_BASE = 'https://api.appspro.dev/api/v1';
 
 /** AppsPro's own success sentinel — every SDK response includes
  * `status_code`, and "S1000"/"Success" is what a genuinely-successful
@@ -72,19 +97,29 @@ interface VerifySubscriberResponse {
   reason?: string;
 }
 
+/** Routes through the static-IP relay when configured (see `Env`'s doc
+ * comments above), otherwise calls AppsPro directly. The relay is a pure
+ * hop — it forwards the `Authorization` header untouched, so the actual
+ * AppsPro request/response shape is identical either way; only the
+ * outbound IP AppsPro sees, and one extra `X-Relay-Secret` header for
+ * that hop's own auth, differ. */
 async function callAppsPro<T>(
   env: Env,
   method: 'GET' | 'POST',
   path: string,
   body?: Record<string, unknown>,
 ): Promise<T> {
+  const useRelay = Boolean(env.APPSPRO_RELAY_URL && env.APPSPRO_RELAY_SECRET);
+  const base = useRelay ? `${env.APPSPRO_RELAY_URL}/api/v1` : APPSPRO_DIRECT_API_BASE;
+
   let response: Response;
   try {
-    response = await fetch(`${APPSPRO_API_BASE}${path}`, {
+    response = await fetch(`${base}${path}`, {
       method,
       headers: {
         Authorization: `Bearer ${env.APPSPRO_SECRET_KEY}`,
         'Content-Type': 'application/json',
+        ...(useRelay ? { 'X-Relay-Secret': env.APPSPRO_RELAY_SECRET! } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
     });

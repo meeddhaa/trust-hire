@@ -94,6 +94,47 @@ describe('requestOtp', () => {
 
     await expect(requestOtp(env, '01812345678')).rejects.toThrow(AppsProApiError);
   });
+
+  it('routes through the relay (URL + X-Relay-Secret header) when both relay env vars are set', async () => {
+    const relayEnv = {
+      APPSPRO_SECRET_KEY: 'sk_test',
+      APPSPRO_RELAY_URL: 'https://1.2.3.4.sslip.io',
+      APPSPRO_RELAY_SECRET: 'relay_shared_secret',
+    } as never;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ reference_no: 'ref_123', status_code: 'S1000', status_detail: 'Success' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await requestOtp(relayEnv, '01812345678');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://1.2.3.4.sslip.io/api/v1/sdk/otp/request',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer sk_test',
+          'X-Relay-Secret': 'relay_shared_secret',
+        }),
+      }),
+    );
+  });
+
+  it('falls back to calling AppsPro directly when only one relay env var is set', async () => {
+    const partialEnv = { APPSPRO_SECRET_KEY: 'sk_test', APPSPRO_RELAY_URL: 'https://1.2.3.4.sslip.io' } as never;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ reference_no: 'ref_123', status_code: 'S1000', status_detail: 'Success' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await requestOtp(partialEnv, '01812345678');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.appspro.dev/api/v1/sdk/otp/request',
+      expect.objectContaining({
+        headers: expect.not.objectContaining({ 'X-Relay-Secret': expect.anything() }),
+      }),
+    );
+  });
 });
 
 describe('verifyOtpAndSignIn', () => {

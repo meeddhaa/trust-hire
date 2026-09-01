@@ -584,6 +584,27 @@ sign-in screen's copy names no specific figure — the real rate is
 whatever's configured on AppsPro's own Pricing tab for this app, not a
 number to keep in sync by hand in Dart/TS source.
 
+**The static-IP relay:** live-tested, AppsPro's dashboard rejects
+`/sdk/otp/request` (and presumably every other Bearer-authed SDK call)
+from an IP not in its "Allowed Host Address(es)" list — and confirmed
+live that Cloudflare Workers don't call out from one fixed IP (three
+diagnostic requests each landed on a different Cloudflare edge IP,
+depending on which of Cloudflare's global PoPs handled it). `appspro-relay/`
+is the fix: a tiny always-on VM (deploy target: Oracle Cloud's Always
+Free tier, one real static IP, $0/month) that the Worker sends its
+AppsPro calls to instead, which forwards them on to the real AppsPro API
+and streams the response back. It never sees `secret_key` itself — the
+`Authorization` header just passes through — and only ever forwards to
+`api.appspro.dev`, hardcoded, so its own shared secret
+(`APPSPRO_RELAY_SECRET`) leaking would grant "can call AppsPro," not
+"can make this server call anything." `worker/src/subscription.ts`'s
+`callAppsPro` uses it automatically once `APPSPRO_RELAY_URL`/
+`APPSPRO_RELAY_SECRET` are both set, and falls back to calling AppsPro
+directly otherwise (which is what every environment does until the relay
+VM is actually provisioned — see that directory's README for the full
+walkthrough). **Not yet done:** the VM itself hasn't been provisioned,
+so this path is still blocked in production as of this writing.
+
 **Not yet built:** the "Unsubscribe" action (bdapps' own
 `/api/v1/sdk/unsubscribe` takes a phone number, not the
 `bdappsSubscriptionId` the `Subscription` model already has a field
