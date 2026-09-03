@@ -16,7 +16,7 @@ import {
 } from './prompts';
 import { checkAndConsumeRateLimit } from './rateLimiter';
 import { bandTrustBadge, computeRuleScore, computeScamRuleFlags } from './scamRules';
-import { AppsProApiError, refreshSubscriptionStatus, requestOtp, verifyOtpAndSignIn } from './subscription';
+import { AppsProApiError, checkBdappsStatus, refreshSubscriptionStatus, requestOtp, verifyOtpAndSignIn } from './subscription';
 import type {
   JobCoachGeminiResult,
   JobListingDoc,
@@ -309,6 +309,18 @@ export default {
 
     if (request.method === 'GET' && url.pathname === '/') {
       return json({ ok: true, service: 'trusthire-ai-relay' });
+    }
+
+    // TEMPORARY — diagnosing the E503 from /sdk/otp/request. See
+    // checkBdappsStatus's doc comment. Remove once resolved.
+    if (request.method === 'GET' && url.pathname === '/v1/debug/bdapps-status') {
+      const phone = url.searchParams.get('phone');
+      if (!phone) return errorResponse(400, 'phone query param required');
+      try {
+        return json((await checkBdappsStatus(env, phone)) as Record<string, unknown>);
+      } catch (err) {
+        return errorResponse(500, `${err}`);
+      }
     }
 
     if (request.method !== 'POST') {

@@ -144,6 +144,17 @@ async function callAppsPro<T>(
   return parsed as T;
 }
 
+/** TEMPORARY diagnostic — not part of the sign-in flow. `/sdk/status`
+ * also queries BDApps live for a phone number but is read-only (no SMS
+ * sent, nothing registered), so it's safe to call just to check whether
+ * this app's BDApps access is broadly down/unactivated, or whether it's
+ * specifically `/sdk/otp/request` that's failing. Remove once that's
+ * resolved. */
+export async function checkBdappsStatus(env: Env, rawPhone: string): Promise<unknown> {
+  const normalized = normalizeBdPhoneNumber(rawPhone);
+  return callAppsPro<unknown>(env, 'POST', '/sdk/status', { phone: normalized });
+}
+
 /** Step 1-4 of the required flow: normalize, reject any operator other
  * than Robi/Cirkle (see `bdOperatorForNormalizedPhone`'s doc comment —
  * this is the authoritative check, independent of whatever the client's
@@ -159,6 +170,12 @@ export async function requestOtp(env: Env, rawPhone: string): Promise<{ referenc
 
   const response = await callAppsPro<OtpRequestResponse>(env, 'POST', '/sdk/otp/request', { phone: normalized });
   if (response.status_code !== APPSPRO_SUCCESS_STATUS_CODE || !response.reference_no) {
+    // TEMPORARY diagnostic logging — AppsPro's status_detail has been
+    // empty/generic on real attempts against live BDApps infra, giving no
+    // way to tell "BDApps down" from "app not yet activated for OTP" from
+    // anything else without seeing the actual response. Remove once the
+    // live OTP flow is confirmed working end-to-end.
+    console.error('AppsPro /sdk/otp/request non-success response:', JSON.stringify(response));
     throw new AppsProApiError(response.status_detail || 'Could not send an OTP — try again.');
   }
   return { referenceNo: response.reference_no, statusDetail: response.status_detail ?? 'Success' };
