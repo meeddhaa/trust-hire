@@ -6,11 +6,18 @@ import '../../../core/errors/failure.dart';
 import '../../../core/theme/app_motion.dart';
 import '../providers/onboarding_providers.dart';
 
-/// Profile build: skills (the input side of the match-gap diff),
+/// Profile build: name, skills (the input side of the match-gap diff),
 /// experience, and education — typed, not a resume upload, per the
 /// "Decision: no Firebase Storage" note in docs/ARCHITECTURE.md. The
 /// router redirects here for any signed-in user whose profile isn't
 /// `onboardingComplete` yet, and away from here once it is.
+///
+/// Name is collected here, required, rather than pulled off the signed-in
+/// Firebase user — a phone+OTP sign-in (see `SignInScreen`) has no
+/// display name of its own, and this is the one screen every user passes
+/// through regardless of how they signed in. Without it,
+/// `UserProfile.friendlyUsername` has nothing to fall back to but the
+/// phone number, or "there".
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -19,6 +26,7 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 }
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
+  final _nameController = TextEditingController();
   final _skillController = TextEditingController();
   // Autocomplete's own assertion requires focusNode and textEditingController
   // to be given together or not at all — caught live: passing only the
@@ -33,6 +41,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   @override
   void dispose() {
+    _nameController.dispose();
     _skillController.dispose();
     _skillFocusNode.dispose();
     _headlineController.dispose();
@@ -57,6 +66,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   void _removeSkill(String skill) => setState(() => _skills.remove(skill));
 
   void _submit() {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('Enter your name to continue.')));
+      return;
+    }
     if (_skills.isEmpty) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
@@ -64,6 +80,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       return;
     }
     ref.read(onboardingControllerProvider.notifier).submit(
+          displayName: name,
           skills: _skills,
           yearsOfExperience: int.tryParse(_yearsController.text.trim()),
           educationLevel:
@@ -98,9 +115,27 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
               children: [
                 Text(
-                  "What you're good at",
+                  'What should we call you?',
                   style: text.headlineSmall,
                 ).animate().fadeIn(duration: AppMotion.standard),
+                const SizedBox(height: 4),
+                Text(
+                  'Shown on your profile — the only place this app ever asks for a name.',
+                  style: text.bodyMedium,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _nameController,
+                  textCapitalization: TextCapitalization.words,
+                  autofillHints: const [AutofillHints.name],
+                  decoration: const InputDecoration(labelText: 'Name', hintText: 'e.g. Naafisa Medha'),
+                ),
+                const SizedBox(height: 28),
+
+                Text(
+                  "What you're good at",
+                  style: text.headlineSmall,
+                ),
                 const SizedBox(height: 4),
                 Text(
                   'This is what every match score gets diffed against — the more '

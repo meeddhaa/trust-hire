@@ -12,6 +12,7 @@ class OnboardingController extends AsyncNotifier<void> {
   FutureOr<void> build() {}
 
   Future<void> submit({
+    required String displayName,
     required List<String> skills,
     int? yearsOfExperience,
     String? educationLevel,
@@ -26,6 +27,7 @@ class OnboardingController extends AsyncNotifier<void> {
     state = await AsyncValue.guard(() {
       return ref.read(profileRepositoryProvider).saveOnboarding(
             uid: uid,
+            displayName: displayName,
             skills: skills,
             yearsOfExperience: yearsOfExperience,
             educationLevel: educationLevel,

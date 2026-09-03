@@ -44,9 +44,15 @@ class ProfileRepository {
 
   /// Saves the onboarding form and marks it complete — the router redirect
   /// guard checks `onboardingComplete` to decide whether to show onboarding
-  /// or the listings feed.
+  /// or the listings feed. `displayName` is collected here rather than
+  /// pulled off the Firebase user (see `UserProfile.fromFirebaseUser`)
+  /// because a phone+OTP sign-in has no such thing — this is the one
+  /// point every user, regardless of how they signed in, passes through,
+  /// so it's what guarantees `friendlyUsername` never falls all the way
+  /// back to a bare phone number or "there".
   Future<void> saveOnboarding({
     required String uid,
+    required String displayName,
     required List<String> skills,
     int? yearsOfExperience,
     String? educationLevel,
@@ -54,6 +60,7 @@ class ProfileRepository {
   }) async {
     try {
       await _doc(uid).update({
+        'displayName': displayName,
         'skills': skills,
         'yearsOfExperience': yearsOfExperience,
         'educationLevel': educationLevel,
@@ -75,6 +82,18 @@ class ProfileRepository {
       await _doc(uid).update({'resumeBase64': base64, 'updatedAt': Timestamp.now()});
     } on FirebaseException {
       throw const NetworkFailure("Couldn't save your resume — check your internet and try again.");
+    }
+  }
+
+  /// Updates the display name after onboarding (see `SettingsScreen`) —
+  /// onboarding itself only ever runs once per account, so anyone who
+  /// completed it before that screen collected a name needs this to fix
+  /// `UserProfile.friendlyUsername` falling back to their phone number.
+  Future<void> setDisplayName(String uid, String name) async {
+    try {
+      await _doc(uid).update({'displayName': name, 'updatedAt': Timestamp.now()});
+    } on FirebaseException {
+      throw const NetworkFailure("Couldn't save your name — check your internet and try again.");
     }
   }
 
